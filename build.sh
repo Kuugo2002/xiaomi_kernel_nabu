@@ -29,9 +29,9 @@ color_echo "$green" "工作目录: $SCRIPT_DIR"
 
 # --- 关键改进 2: 参数解析增强 ---
 # 参数处理
-TARGET_DEVICE=""
-KERNEL_NAME="Nijika"
-KERNEL_VERSION="v2.0"
+TARGET_DEVICE="nabu"
+KERNEL_NAME="Kuugo"
+KERNEL_VERSION="v1.0"
 FIX_VERSION="6"
 USE_KSU=true       # 默认启用 KSU
 CCACHE_ENABLED=true
@@ -39,14 +39,14 @@ NO_CLEAN=false
 USE_THINLTO=true   # 默认开启 ThinLTO
 MAKE_FLAGS=""
 
-# 解析目标设备
-if [ $# -lt 1 ]; then
-    color_echo "$red" "错误: 未指定目标设备"
-    color_echo "$yellow" "用法: $0 <设备名称> [选项]"
-    exit 1
+# 解析目标设备（如果没有参数或参数以 -- 开头，则使用默认的 nabu）
+if [ $# -lt 1 ] || [[ "$1" == --* ]]; then
+    TARGET_DEVICE="nabu"
+    color_echo "$yellow" "未指定设备，使用默认设备: $TARGET_DEVICE"
+else
+    TARGET_DEVICE="$1"
+    shift || true
 fi
-TARGET_DEVICE="$1"
-shift || true
 
 # 处理选项参数
 while [ $# -gt 0 ]; do
@@ -83,7 +83,7 @@ done
 BUILD_DIR="../Releases_${TARGET_DEVICE}_${KERNEL_NAME}"
 color_echo "$green" "使用独立构建目录: $BUILD_DIR"
 
-CLANG_PATH=${CLANG_PATH:-$HOME/build_toolchain/clang-r522817/bin}
+CLANG_PATH=${CLANG_PATH:-$HOME/toolchains/clang-A15/bin}
 
 # 设置完整的工具路径
 export CLANG_BIN="$CLANG_PATH/clang"
@@ -93,8 +93,8 @@ export CLANGXX_BIN="$CLANG_PATH/clang++"
 MAKE_ARGS="O=$BUILD_DIR"
 
 # 编译信息
-MAKE_ARGS+=" KBUILD_BUILD_HOST=AviderMin"
-MAKE_ARGS+=" KBUILD_BUILD_USER=Nijika"
+MAKE_ARGS+=" KBUILD_BUILD_HOST=Kuugo"
+MAKE_ARGS+=" KBUILD_BUILD_USER=kuugo"
 
 # 修改编译参数设置
 MAKE_ARGS+=" ARCH=arm64"
