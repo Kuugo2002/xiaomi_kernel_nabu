@@ -38,6 +38,7 @@ CCACHE_ENABLED=true
 NO_CLEAN=false
 USE_THINLTO=true   # 默认开启 ThinLTO
 MAKE_FLAGS=""
+NUM_JOBS=$(nproc --all)
 
 # 解析目标设备（如果没有参数或参数以 -- 开头，则使用默认的 nabu）
 if [ $# -lt 1 ] || [[ "$1" == --* ]]; then
@@ -51,6 +52,15 @@ fi
 # 处理选项参数
 while [ $# -gt 0 ]; do
     case "$1" in
+        -j)                 # <--- 新增：支持 -j 8 这种写法
+            if [[ "$2" =~ ^[0-9]+$ ]]; then
+                NUM_JOBS="$2"
+                shift 2
+            else
+                color_echo "$red" "错误: -j 参数后面必须跟数字"
+                exit 1
+            fi
+            ;;
         --noccache)
             CCACHE_ENABLED=false
             shift
@@ -141,6 +151,7 @@ color_echo "$yellow" "目标设备:    $TARGET_DEVICE"
 color_echo "$yellow" "内核名称:    $KERNEL_NAME"
 color_echo "$yellow" "内核版本:    $KERNEL_VERSION"
 color_echo "$yellow" "修复版本:    $FIX_VERSION"
+color_echo "$yellow" "编译线程数:  $NUM_JOBS"
 color_echo "$yellow" "KernelSU:    $($USE_KSU && echo "启用" || echo "禁用")"
 #color_echo "$yellow" "ThinLTO:     $($USE_THINLTO && echo "启用" || echo "禁用")"
 color_echo "$yellow" "ccache:      $($CCACHE_ENABLED && echo "启用" || echo "禁用")"
@@ -224,11 +235,10 @@ make $MAKE_ARGS olddefconfig
 
 # 记录开始时间
 START_TIME=$(date +%s)
-NUM_JOBS=$(nproc --all)
 
 # 编译内核
 color_echo "$green" "开始编译内核 (使用 $NUM_JOBS 个线程)..."
-make $MAKE_ARGS -j$(nproc --all) $MAKE_FLAGS
+make $MAKE_ARGS -j$NUM_JOBS $MAKE_FLAGS
 
 # 检查编译结果
 IMAGE_PATH="$BUILD_DIR/arch/arm64/boot/Image"
@@ -252,8 +262,12 @@ DTBO_PATH="$BUILD_DIR/arch/arm64/boot/dtbo.img"
 ANY_KERNEL_DIR="$SCRIPT_DIR/anykernel"
 
 cp "$IMAGE_PATH" "$ANY_KERNEL_DIR"
-cp "$DTB_PATH" "$ANY_KERNEL_DIR"
 cp "$DTBO_PATH" "$ANY_KERNEL_DIR"
+if [[ -f "$DTB_PATH" ]]; then
+    cp "$DTB_PATH" "$ANY_KERNEL_DIR"
+else
+    color_echo "$yellow" "提示: 未检测到 DTB 文件，跳过复制"
+fi
 
 # 创建ZIP文件名
 KSU_STR=$($USE_KSU && echo "SU" || echo "NoSU")
