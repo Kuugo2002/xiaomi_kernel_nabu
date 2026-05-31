@@ -52,7 +52,7 @@ fi
 # 处理选项参数
 while [ $# -gt 0 ]; do
     case "$1" in
-        -j)                 # <--- 新增：支持 -j 8 这种写法
+        -j)                 
             if [[ "$2" =~ ^[0-9]+$ ]]; then
                 NUM_JOBS="$2"
                 shift 2
@@ -122,7 +122,6 @@ MAKE_ARGS+=" CROSS_COMPILE=aarch64-linux-gnu-"
 
 # 设置 PATH 环境变量
 export PATH="$CLANG_PATH:$PATH"
-export PATH="$HOME/toolchains/python2/bin:$PATH"
 
 # 设置ccache
 if $CCACHE_ENABLED; then
@@ -187,9 +186,8 @@ make $MAKE_ARGS "${TARGET_DEVICE}_defconfig"
 if $USE_KSU; then
     color_echo "$green" "启用 KernelSU..."
     ./scripts/config --file "$BUILD_DIR/.config" \
-        -e KSU \
-        -e KSU_MANUAL_HOOK \
-        -e CONFIG_KSU_SUSFS
+        -e KSU
+        # -e KSU_MANUAL_HOOK \
         # -e KSU_SUSFS_HAS_MAGIC_MOUNT \
         # -e KSU_SUSFS_SUS_MOUNT \
         # -e KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \

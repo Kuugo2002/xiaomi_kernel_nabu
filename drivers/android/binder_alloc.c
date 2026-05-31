@@ -31,9 +31,6 @@
 #include <linux/list_lru.h>
 #include <linux/uaccess.h>
 #include <linux/highmem.h>
-/* REKERNEL */
-#include <../rekernel/rekernel.h>
-/* REKERNEL */
 #include "binder_alloc.h"
 #include "binder_trace.h"
 
@@ -404,9 +401,6 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 				int is_async,
 				int pid)
 {
-/* REKERNEL */
-	struct task_struct *proc_task = NULL;
-/* REKERNEL */
 	struct rb_node *n = alloc->free_buffers.rb_node;
 	struct binder_buffer *buffer;
 	size_t buffer_size;
@@ -438,22 +432,6 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 				alloc->pid, extra_buffers_size);
 		return ERR_PTR(-EINVAL);
 	}
-/* REKERNEL */
-	if (is_async
-		&& (alloc->free_async_space < 3 * (size + sizeof(struct binder_buffer))
-		|| (alloc->free_async_space < WARN_AHEAD_SPACE))) {
-		rcu_read_lock();
-		proc_task = find_task_by_vpid(alloc->pid);
-		rcu_read_unlock();
-		if (proc_task != NULL && start_rekernel_server() == 0) {
-			if (line_is_frozen(proc_task)) {
-	 			char binder_kmsg[PACKET_SIZE];
-					snprintf(binder_kmsg, sizeof(binder_kmsg), "type=Binder,bindertype=free_buffer_full,oneway=1,from_pid=%d,from=%d,target_pid=%d,target=%d;", current->pid, task_uid(current).val, proc_task->pid, task_uid(proc_task).val);
-	 			send_netlink_message(binder_kmsg, strlen(binder_kmsg));
-			}
-		}
-	}
-/* REKERNEL */
 	if (is_async &&
 	    alloc->free_async_space < size + sizeof(struct binder_buffer)) {
 		binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
