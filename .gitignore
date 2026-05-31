@@ -137,3 +137,10 @@ Android.bp
 out/
 *.zip
 *.log
+
+#
+# anykernel3
+#
+dtb
+dtbo.img
+Image
