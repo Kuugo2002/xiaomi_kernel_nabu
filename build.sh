@@ -52,7 +52,7 @@ fi
 # 处理选项参数
 while [ $# -gt 0 ]; do
     case "$1" in
-        -j)                 # <--- 新增：支持 -j 8 这种写法
+        -j)                 
             if [[ "$2" =~ ^[0-9]+$ ]]; then
                 NUM_JOBS="$2"
                 shift 2
@@ -186,21 +186,21 @@ make $MAKE_ARGS "${TARGET_DEVICE}_defconfig"
 if $USE_KSU; then
     color_echo "$green" "启用 KernelSU..."
     ./scripts/config --file "$BUILD_DIR/.config" \
-        -e KSU \
-        -e KSU_MANUAL_HOOK \
-        -e KSU_SUSFS_HAS_MAGIC_MOUNT \
-        -e KSU_SUSFS_SUS_MOUNT \
-        -e KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
-        -e KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
-        -e KSU_SUSFS_SUS_KSTAT \
-        -e KSU_SUSFS_TRY_UMOUNT \
-        -e KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
-        -e KSU_SUSFS_SPOOF_UNAME \
-        -e KSU_SUSFS_ENABLE_LOG \
-        -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-        -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-        -e KSU_MULTI_MANAGER_SUPPORT \
-        -d KSU_SUSFS_SUS_SU
+        -e KSU
+        # -e KSU_MANUAL_HOOK \
+        # -e KSU_SUSFS_HAS_MAGIC_MOUNT \
+        # -e KSU_SUSFS_SUS_MOUNT \
+        # -e KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
+        # -e KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
+        # -e KSU_SUSFS_SUS_KSTAT \
+        # -e KSU_SUSFS_TRY_UMOUNT \
+        # -e KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
+        # -e KSU_SUSFS_SPOOF_UNAME \
+        # -e KSU_SUSFS_ENABLE_LOG \
+        # -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+        # -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+        # -e KSU_MULTI_MANAGER_SUPPORT \
+        # -d KSU_SUSFS_SUS_SU
 
 else
     color_echo "$yellow" "禁用 KernelSU..."
