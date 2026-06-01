@@ -19,7 +19,7 @@ color_echo() {
 # 确保脚本在出错时退出
 set -e
 
-# --- 关键改进 1: 动态定位脚本目录 ---
+# 动态定位脚本目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || {
     color_echo "$red" "无法切换到脚本所在目录: $SCRIPT_DIR"
@@ -27,7 +27,6 @@ cd "$SCRIPT_DIR" || {
 }
 color_echo "$green" "工作目录: $SCRIPT_DIR"
 
-# --- 关键改进 2: 参数解析增强 ---
 # 参数处理
 TARGET_DEVICE="nabu"
 KERNEL_NAME="Kuugo"
@@ -36,11 +35,10 @@ FIX_VERSION="6"
 USE_KSU=true       # 默认启用 KSU
 CCACHE_ENABLED=true
 NO_CLEAN=false
-USE_THINLTO=true   # 默认开启 ThinLTO
 MAKE_FLAGS=""
 NUM_JOBS=$(nproc --all)
 
-# 解析目标设备（如果没有参数或参数以 -- 开头，则使用默认的 nabu）
+# 解析目标设备
 if [ $# -lt 1 ] || [[ "$1" == --* ]]; then
     TARGET_DEVICE="nabu"
     color_echo "$yellow" "未指定设备，使用默认设备: $TARGET_DEVICE"
@@ -52,7 +50,7 @@ fi
 # 处理选项参数
 while [ $# -gt 0 ]; do
     case "$1" in
-        -j)                 # <--- 新增：支持 -j 8 这种写法
+        -j)                 
             if [[ "$2" =~ ^[0-9]+$ ]]; then
                 NUM_JOBS="$2"
                 shift 2
@@ -89,7 +87,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# --- 关键改进 3: 唯一构建目录 ---
+# 唯一构建目录
 BUILD_DIR="../Releases_${TARGET_DEVICE}_${KERNEL_NAME}"
 color_echo "$green" "使用独立构建目录: $BUILD_DIR"
 
@@ -110,7 +108,7 @@ MAKE_ARGS+=" KBUILD_BUILD_USER=kuugo"
 MAKE_ARGS+=" ARCH=arm64"
 MAKE_ARGS+=" SUBARCH=arm64"
 
-# LLVM toolchain - 使用完整路径
+# LLVM toolchain
 MAKE_ARGS+=" CC=$CLANG_BIN"
 MAKE_ARGS+=" LD=ld.lld"
 MAKE_ARGS+=" NM=llvm-nm"
@@ -154,7 +152,6 @@ color_echo "$yellow" "内核版本:    $KERNEL_VERSION"
 color_echo "$yellow" "修复版本:    $FIX_VERSION"
 color_echo "$yellow" "编译线程数:  $NUM_JOBS"
 color_echo "$yellow" "KernelSU:    $($USE_KSU && echo "启用" || echo "禁用")"
-#color_echo "$yellow" "ThinLTO:     $($USE_THINLTO && echo "启用" || echo "禁用")"
 color_echo "$yellow" "ccache:      $($CCACHE_ENABLED && echo "启用" || echo "禁用")"
 color_echo "$yellow" "清理:        $($NO_CLEAN && echo "跳过" || echo "执行")"
 color_echo "$cyan" "=============================================="
@@ -187,22 +184,7 @@ make $MAKE_ARGS "${TARGET_DEVICE}_defconfig"
 if $USE_KSU; then
     color_echo "$green" "启用 KernelSU..."
     ./scripts/config --file "$BUILD_DIR/.config" \
-        -e KSU \
-        -e KSU_MANUAL_HOOK \
-        -e CONFIG_KSU_SUSFS
-        # -e KSU_SUSFS_HAS_MAGIC_MOUNT \
-        # -e KSU_SUSFS_SUS_MOUNT \
-        # -e KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
-        # -e KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
-        # -e KSU_SUSFS_SUS_KSTAT \
-        # -e KSU_SUSFS_TRY_UMOUNT \
-        # -e KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
-        # -e KSU_SUSFS_SPOOF_UNAME \
-        # -e KSU_SUSFS_ENABLE_LOG \
-        # -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-        # -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-        # -e KSU_MULTI_MANAGER_SUPPORT \
-        # -d KSU_SUSFS_SUS_SU
+        -e KSU
 
 else
     color_echo "$yellow" "禁用 KernelSU..."
@@ -223,15 +205,6 @@ else
         -d KSU_MULTI_MANAGER_SUPPORT \
         -d KSU_SUSFS_SUS_SU
 fi
-
-# 处理LTO配置
-#if $USE_THINLTO; then
-#    color_echo "$green" "启用 ThinLTO..."
-#    ./scripts/config --file "$BUILD_DIR/.config" -e LTO_CLANG -e THINLTO
-#else
-#    color_echo "$yellow" "禁用 ThinLTO..."
-#    ./scripts/config --file "$BUILD_DIR/.config" -e LTO_CLANG -d THINLTO
-#fi
 
 make $MAKE_ARGS olddefconfig
 
