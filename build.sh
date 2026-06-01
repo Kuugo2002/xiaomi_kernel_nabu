@@ -31,7 +31,6 @@ color_echo "$green" "工作目录: $SCRIPT_DIR"
 TARGET_DEVICE="nabu"
 KERNEL_NAME="Kuugo"
 KERNEL_VERSION="v1.0"
-FIX_VERSION="6"
 USE_KSU=true       # 默认启用 KSU
 CCACHE_ENABLED=true
 NO_CLEAN=false
@@ -142,6 +141,8 @@ if [[ ! -f "$SCRIPT_DIR/arch/arm64/configs/${TARGET_DEVICE}_defconfig" ]]; then
     exit 1
 fi
 
+
+
 # 显示环境信息
 color_echo "$cyan" "=============================================="
 color_echo "$green" "构建配置信息:"
@@ -149,7 +150,6 @@ color_echo "$cyan" "=============================================="
 color_echo "$yellow" "目标设备:    $TARGET_DEVICE"
 color_echo "$yellow" "内核名称:    $KERNEL_NAME"
 color_echo "$yellow" "内核版本:    $KERNEL_VERSION"
-color_echo "$yellow" "修复版本:    $FIX_VERSION"
 color_echo "$yellow" "编译线程数:  $NUM_JOBS"
 color_echo "$yellow" "KernelSU:    $($USE_KSU && echo "启用" || echo "禁用")"
 color_echo "$yellow" "ccache:      $($CCACHE_ENABLED && echo "启用" || echo "禁用")"
@@ -167,9 +167,32 @@ else
     color_echo "$yellow" "跳过清理步骤..."
 fi
 
+# KernelSU 源码清理与同步
+if $USE_KSU; then
+    color_echo "$green" "正在检查并清理旧的 KernelSU 源码..."
+    
+    # 移除源码根目录下的 KernelSU 文件夹
+    if [ -d "KernelSU" ]; then
+        color_echo "$yellow" "移除旧的 KernelSU 目录..."
+        rm -rf KernelSU
+    fi
+
+    # 移除 drivers/kernelsu 文件夹
+    if [ -d "drivers/kernelsu" ]; then
+        color_echo "$yellow" "移除旧的 drivers/kernelsu 目录..."
+        rm -rf drivers/kernelsu
+    fi
+
+    # 拉取并安装指定的 KernelSU 版本
+    color_echo "$green" "正在下载并配置 KernelSU v0.9.5..."
+    curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v0.9.5
+else
+    color_echo "$yellow" "由于未启用 KernelSU，跳过 KernelSU 源码下载与同步。"
+fi
+
 # 添加日期到本地版本
 LOCAL_VERSION_STR="-perf"
-LOCAL_VERSION_DATE="-${KERNEL_NAME}-${KERNEL_VERSION}-$(date +%y%m%d)${FIX_VERSION}"
+LOCAL_VERSION_DATE="-${KERNEL_NAME}-${KERNEL_VERSION}"
 touch .scmversion
 
 # 配置内核
@@ -246,7 +269,7 @@ fi
 
 # 创建ZIP文件名
 KSU_STR=$($USE_KSU && echo "SU" || echo "NoSU")
-ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_${KSU_STR}_$(date +%y%m%d)${FIX_VERSION}.zip"
+ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_${KSU_STR}_$(date +%y%m%d)zip"
 
 color_echo "$green" "创建刷机包: $ZIP_NAME"
 (cd "$ANY_KERNEL_DIR" && zip -r9 "$ZIP_NAME" ./* -x .git .gitignore out/ ./*.zip)
