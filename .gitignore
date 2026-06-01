@@ -141,6 +141,4 @@ out/
 #
 # anykernel3
 #
-dtb
-dtbo.img
 Image
