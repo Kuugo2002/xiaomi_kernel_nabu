@@ -127,6 +127,7 @@ MAKE_ARGS+=" CROSS_COMPILE=aarch64-linux-gnu-"
 # 设置 PATH 环境变量
 export PATH="$CLANG_PATH:$PATH"
 export PATH="$HOME/make-4.3:$PATH"
+export PATH="$HOME/toolchains/python2/bin:$PATH"
 export IGNORE_GIT=1
 
 # 设置ccache
@@ -191,7 +192,8 @@ make $MAKE_ARGS "${TARGET_DEVICE}_defconfig"
 if $USE_KSU; then
     color_echo "$green" "启用 KernelSU..."
     ./scripts/config --file "$BUILD_DIR/.config" \
-        -e KSU
+        -e KSU \
+        -e KSU_SUSFS
 
 else
     color_echo "$yellow" "禁用 KernelSU..."
