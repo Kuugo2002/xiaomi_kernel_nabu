@@ -10,7 +10,7 @@
 #
 # Copyright (C) 1995-2001 by Russell King
 
-LDFLAGS_vmlinux	:=--no-undefined -X -z norelro
+LDFLAGS_vmlinux	:=--no-undefined -X
 CPPFLAGS_vmlinux.lds = -DTEXT_OFFSET=$(TEXT_OFFSET)
 GZFLAGS		:=-9
 
@@ -18,7 +18,7 @@ ifeq ($(CONFIG_RELOCATABLE), y)
 # Pass --no-apply-dynamic-relocs to restore pre-binutils-2.27 behaviour
 # for relative relocs, since this leads to better Image compression
 # with the relocation offsets always being zero.
-LDFLAGS_vmlinux		+= -shared -Bsymbolic -z notext \
+LDFLAGS_vmlinux		+= -shared -Bsymbolic -z notext -z norelro \
 			$(call ld-option, --no-apply-dynamic-relocs)
 endif
 
@@ -73,12 +73,6 @@ KBUILD_AFLAGS	+= $(lseinstr) $(brokengasinst)
 
 KBUILD_CFLAGS	+= $(call cc-option,-mabi=lp64)
 KBUILD_AFLAGS	+= $(call cc-option,-mabi=lp64)
-
-ifeq ($(cc-name),clang)
-KBUILD_CFLAGS	+= -DCONFIG_ARCH_SUPPORTS_INT128
-else
-KBUILD_CFLAGS += $(call cc-ifversion, -ge, 0500, -DCONFIG_ARCH_SUPPORTS_INT128)
-endif
 
 ifeq ($(CONFIG_SHADOW_CALL_STACK), y)
 KBUILD_CFLAGS	+= -ffixed-x18
@@ -184,10 +178,6 @@ endif
 
 KBUILD_DTBS	:= dtbs
 
-KBUILD_DTBO_IMG := dtbo.img
-
-KBUILD_DTB_IMG := dtb
-
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 export DTC_FLAGS := -@
 endif
@@ -219,17 +209,6 @@ Image-dtb: vmlinux scripts dtbs
 
 Image.gz-dtb: vmlinux scripts dtbs Image.gz
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-
-ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
-$(KBUILD_DTBO_IMG): dtbs
-	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-
-all: $(KBUILD_DTBO_IMG)
-$(KBUILD_DTB_IMG): dtbs
-	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-
-all: $(KBUILD_DTB_IMG)
-endif
 
 PHONY += vdso_install
 vdso_install:
