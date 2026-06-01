@@ -141,6 +141,12 @@ out/
 #
 # anykernel3
 #
-dtb
-dtbo.img
-Image
+anykernel/dtb
+anykernel/dtbo.img
+anykernel/Image
+
+#
+# KSU
+#
+KernelSU-Next
+drivers/kernelsu
