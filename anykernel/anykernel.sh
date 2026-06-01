@@ -1,7 +1,7 @@
 # AnyKernel3 Ramdisk Mod Script
 # osm0sis @ xda-developers
 properties() { '
-kernel.string=Rave Kernel by AviderMin
+kernel.string=nabu Kernel by Kuugo
 device.name1=nabu
 do.devicecheck=1
 do.modules=0
