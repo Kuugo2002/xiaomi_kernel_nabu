@@ -71,7 +71,8 @@ config CROSS_COMPILE
 
 config COMPILE_TEST
 	bool "Compile also drivers which will not load"
-	depends on HAS_IOMEM
+	depends on !UML
+	default n
 	help
 	  Some drivers can be compiled on a different platform than they are
 	  intended to be run on. Despite they cannot be loaded there (or even
@@ -113,15 +114,6 @@ config LOCALVERSION_AUTO
 	    $ git rev-parse --verify HEAD
 
 	  which is done within the script "scripts/setlocalversion".)
-
-config LOCALVERSION_BRANCH_SHA
-	bool "Leave only branch name and current tree"
-	default y
-	depends on LOCALVERSION_AUTO
-	depends on !COMPILE_TEST
-	help
-	  A cleaner version of LOCALVERSION_AUTO, contains branch name
-	  and current tree.
 
 config HAVE_KERNEL_GZIP
 	bool
@@ -576,8 +568,7 @@ config IKHEADERS
 
 config LOG_BUF_SHIFT
 	int "Kernel log buffer size (16 => 64KB, 17 => 128KB)"
-	range 12 25 if !H8300
-	range 12 19 if H8300
+	range 12 25
 	default 17
 	depends on PRINTK
 	help
@@ -1218,31 +1209,6 @@ config CC_OPTIMIZE_FOR_SIZE
 
 endchoice
 
-config HAVE_LD_DEAD_CODE_DATA_ELIMINATION
-	bool
-	help
-	  This requires that the arch annotates or otherwise protects
-	  its external entry points from being discarded. Linker scripts
-	  must also merge .text.*, .data.*, and .bss.* correctly into
-	  output sections. Care must be taken not to pull in unrelated
-	  sections (e.g., '.text.init'). Typically '.' in section names
-	  is used to distinguish them from label names / C identifiers.
-
-config LD_DEAD_CODE_DATA_ELIMINATION
-	bool "Dead code and data elimination (EXPERIMENTAL)"
-	depends on HAVE_LD_DEAD_CODE_DATA_ELIMINATION
-	help
-	  Enable this if you want to do dead code and data elimination with
-	  the linker by compiling with -ffunction-sections -fdata-sections,
-	  and linking with --gc-sections.
-
-	  This can reduce on disk and in-memory size of the kernel
-	  code and static data, particularly for small configs and
-	  on small systems. This has the possibility of introducing
-	  silently broken kernel if the required annotations are not
-	  present. This option is not well tested yet, so use at your
-	  own risk.
-
 config SYSCTL
 	bool
 
@@ -1691,7 +1657,7 @@ config VM_EVENT_COUNTERS
 	  if VM event counters are disabled.
 
 config SLUB_DEBUG
-	default n
+	default y
 	bool "Enable SLUB debugging support" if EXPERT
 	depends on SLUB && SYSFS
 	help

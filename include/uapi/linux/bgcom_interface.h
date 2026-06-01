@@ -17,8 +17,6 @@
 #define BGCOM_BG_WEAR_LOAD 11
 #define BGCOM_BG_WEAR_TWM_LOAD 12
 #define BGCOM_BG_WEAR_UNLOAD 13
-#define BGCOM_BG_FETCH_TWM_DATA 14
-#define BGCOM_BG_READ_TWM_DATA 15
 #define EXCHANGE_CODE  'V'
 
 struct bg_ui_data {
@@ -27,7 +25,6 @@ struct bg_ui_data {
 	__u32  bg_address;
 	__u32  cmd;
 	__u32  num_of_words;
-	__u8 __user *buffer;
 };
 
 enum bg_event_type {
@@ -83,11 +80,5 @@ enum bg_event_type {
 	struct bg_ui_data)
 #define BG_ADSP_DOWN2_BG_DONE \
 	_IOWR(EXCHANGE_CODE, BGCOM_ADSP_DOWN2_BG, \
-	struct bg_ui_data)
-#define BG_FETCH_TWM_DATA \
-	_IOWR(EXCHANGE_CODE, BGCOM_BG_FETCH_TWM_DATA, \
-	struct bg_ui_data)
-#define BG_READ_TWM_DATA \
-	_IOWR(EXCHANGE_CODE, BGCOM_BG_READ_TWM_DATA, \
 	struct bg_ui_data)
 #endif

@@ -29,8 +29,7 @@ bool verity_fec_is_enabled(struct dm_verity *v)
  */
 static inline struct dm_verity_fec_io *fec_io(struct dm_verity_io *io)
 {
-	return (struct dm_verity_fec_io *)
-		((char *)io + io->v->ti->per_io_data_size - sizeof(struct dm_verity_fec_io));
+	return (struct dm_verity_fec_io *) verity_io_digest_end(io->v, io);
 }
 
 /*
@@ -216,14 +215,11 @@ static int fec_read_bufs(struct dm_verity *v, struct dm_verity_io *io,
 	struct dm_verity_fec_io *fio = fec_io(io);
 	u64 block, ileaved;
 	u8 *bbuf, *rs_block;
-	u8 want_digest[HASH_MAX_DIGESTSIZE];
+	u8 want_digest[v->digest_size];
 	unsigned n, k;
 
 	if (neras)
 		*neras = 0;
-
-	if (WARN_ON(v->digest_size > sizeof(want_digest)))
-		return -EINVAL;
 
 	/*
 	 * read each of the rsn data blocks that are part of the RS block, and

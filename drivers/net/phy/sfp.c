@@ -830,7 +830,7 @@ static int sfp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, sfp);
 
-	err = devm_add_action_or_reset(sfp->dev, sfp_cleanup, sfp);
+	err = devm_add_action(sfp->dev, sfp_cleanup, sfp);
 	if (err < 0)
 		return err;
 
@@ -881,8 +881,7 @@ static int sfp_probe(struct platform_device *pdev)
 			continue;
 
 		irq = gpiod_to_irq(sfp->gpio[i]);
-		if (irq < 0) {
-			irq = 0;
+		if (!irq) {
 			poll = true;
 			continue;
 		}

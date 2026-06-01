@@ -4929,9 +4929,6 @@ static int fg_psy_get_property(struct power_supply *psy,
         }
 #endif
 
-	if (psp == 67)
-		return 0;
-
 	switch (psp) {
 #ifdef CONFIG_BATT_VERIFY_BY_DS28E16_NABU
 	case POWER_SUPPLY_PROP_AUTHENTIC:

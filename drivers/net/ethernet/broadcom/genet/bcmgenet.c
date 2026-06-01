@@ -72,9 +72,6 @@
 #define GENET_RDMA_REG_OFF	(priv->hw_params->rdma_offset + \
 				TOTAL_DESC * DMA_DESC_SIZE)
 
-/* Forward declarations */
-static void bcmgenet_set_rx_mode(struct net_device *dev);
-
 static inline void bcmgenet_writel(u32 value, void __iomem *offset)
 {
 	/* MIPS chips strapped for BE will automagically configure the
@@ -1158,8 +1155,7 @@ static void bcmgenet_power_up(struct bcmgenet_priv *priv,
 
 	switch (mode) {
 	case GENET_POWER_PASSIVE:
-		reg &= ~(EXT_PWR_DOWN_DLL | EXT_PWR_DOWN_BIAS |
-			 EXT_ENERGY_DET_MASK);
+		reg &= ~(EXT_PWR_DOWN_DLL | EXT_PWR_DOWN_BIAS);
 		if (GENET_IS_V5(priv)) {
 			reg &= ~(EXT_PWR_DOWN_PHY_EN |
 				 EXT_PWR_DOWN_PHY_RD |
@@ -1522,11 +1518,6 @@ static struct sk_buff *bcmgenet_put_tx_csum(struct net_device *dev,
 	return skb;
 }
 
-static void bcmgenet_hide_tsb(struct sk_buff *skb)
-{
-	__skb_pull(skb, sizeof(struct status_64));
-}
-
 static netdev_tx_t bcmgenet_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bcmgenet_priv *priv = netdev_priv(dev);
@@ -1570,6 +1561,11 @@ static netdev_tx_t bcmgenet_xmit(struct sk_buff *skb, struct net_device *dev)
 				   __func__, index, ring->queue);
 		}
 		ret = NETDEV_TX_BUSY;
+		goto out;
+	}
+
+	if (skb_padto(skb, ETH_ZLEN)) {
+		ret = NETDEV_TX_OK;
 		goto out;
 	}
 
@@ -1622,13 +1618,8 @@ static netdev_tx_t bcmgenet_xmit(struct sk_buff *skb, struct net_device *dev)
 		len_stat = (size << DMA_BUFLENGTH_SHIFT) |
 			   (priv->hw_params->qtag_mask << DMA_TX_QTAG_SHIFT);
 
-		/* Note: if we ever change from DMA_TX_APPEND_CRC below we
-		 * will need to restore software padding of "runt" packets
-		 */
-		len_stat |= DMA_TX_APPEND_CRC;
-
 		if (!i) {
-			len_stat |= DMA_SOP;
+			len_stat |= DMA_TX_APPEND_CRC | DMA_SOP;
 			if (skb->ip_summed == CHECKSUM_PARTIAL)
 				len_stat |= DMA_TX_DO_CSUM;
 		}
@@ -1639,8 +1630,6 @@ static netdev_tx_t bcmgenet_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	GENET_CB(skb)->last_cb = tx_cb_ptr;
-
-	bcmgenet_hide_tsb(skb);
 	skb_tx_timestamp(skb);
 
 	/* Decrement total BD count and advance our write pointer */
@@ -1800,14 +1789,6 @@ static unsigned int bcmgenet_desc_rx(struct bcmgenet_rx_ring *ring,
 			  "%s:p_ind=%d c_ind=%d read_ptr=%d len_stat=0x%08x\n",
 			  __func__, p_index, ring->c_index,
 			  ring->read_ptr, dma_length_status);
-
-		if (unlikely(len > RX_BUF_LENGTH)) {
-			netif_err(priv, rx_status, dev, "oversized packet\n");
-			dev->stats.rx_length_errors++;
-			dev->stats.rx_errors++;
-			dev_kfree_skb_any(skb);
-			goto next;
-		}
 
 		if (unlikely(!(dma_flag & DMA_EOP) || !(dma_flag & DMA_SOP))) {
 			netif_err(priv, rx_status, dev,
@@ -2807,21 +2788,15 @@ static void bcmgenet_set_hw_addr(struct bcmgenet_priv *priv,
 /* Returns a reusable dma control register value */
 static u32 bcmgenet_dma_disable(struct bcmgenet_priv *priv)
 {
-	unsigned int i;
 	u32 reg;
 	u32 dma_ctrl;
 
 	/* disable DMA */
 	dma_ctrl = 1 << (DESC_INDEX + DMA_RING_BUF_EN_SHIFT) | DMA_EN;
-	for (i = 0; i < priv->hw_params->tx_queues; i++)
-		dma_ctrl |= (1 << (i + DMA_RING_BUF_EN_SHIFT));
 	reg = bcmgenet_tdma_readl(priv, DMA_CTRL);
 	reg &= ~dma_ctrl;
 	bcmgenet_tdma_writel(priv, reg, DMA_CTRL);
 
-	dma_ctrl = 1 << (DESC_INDEX + DMA_RING_BUF_EN_SHIFT) | DMA_EN;
-	for (i = 0; i < priv->hw_params->rx_queues; i++)
-		dma_ctrl |= (1 << (i + DMA_RING_BUF_EN_SHIFT));
 	reg = bcmgenet_rdma_readl(priv, DMA_CTRL);
 	reg &= ~dma_ctrl;
 	bcmgenet_rdma_writel(priv, reg, DMA_CTRL);
@@ -2883,7 +2858,6 @@ static void bcmgenet_netif_start(struct net_device *dev)
 	struct bcmgenet_priv *priv = netdev_priv(dev);
 
 	/* Start the network engine */
-	bcmgenet_set_rx_mode(dev);
 	bcmgenet_enable_rx_napi(priv);
 	bcmgenet_enable_tx_napi(priv);
 
@@ -2930,6 +2904,12 @@ static int bcmgenet_open(struct net_device *dev)
 	priv->crc_fwd_en = !!(reg & CMD_CRC_FWD);
 
 	bcmgenet_set_hw_addr(priv, dev->dev_addr);
+
+	if (priv->internal_phy) {
+		reg = bcmgenet_ext_readl(priv, EXT_EXT_PWR_MGMT);
+		reg |= EXT_ENERGY_DET_MASK;
+		bcmgenet_ext_writel(priv, reg, EXT_EXT_PWR_MGMT);
+	}
 
 	/* Disable RX/TX DMA and flush TX queues */
 	dma_ctrl = bcmgenet_dma_disable(priv);
@@ -3536,12 +3516,10 @@ static int bcmgenet_probe(struct platform_device *pdev)
 
 	/* Request the WOL interrupt and advertise suspend if available */
 	priv->wol_irq_disabled = true;
-	if (priv->wol_irq > 0) {
-		err = devm_request_irq(&pdev->dev, priv->wol_irq,
-				       bcmgenet_wol_isr, 0, dev->name, priv);
-		if (!err)
-			device_set_wakeup_capable(&pdev->dev, 1);
-	}
+	err = devm_request_irq(&pdev->dev, priv->wol_irq, bcmgenet_wol_isr, 0,
+			       dev->name, priv);
+	if (!err)
+		device_set_wakeup_capable(&pdev->dev, 1);
 
 	/* Set the needed headroom to account for any possible
 	 * features enabling/disabling at runtime
@@ -3613,10 +3591,8 @@ static int bcmgenet_probe(struct platform_device *pdev)
 	clk_disable_unprepare(priv->clk);
 
 	err = register_netdev(dev);
-	if (err) {
-		bcmgenet_mii_exit(dev);
+	if (err)
 		goto err;
-	}
 
 	return err;
 
@@ -3690,6 +3666,7 @@ static int bcmgenet_resume(struct device *d)
 	struct bcmgenet_priv *priv = netdev_priv(dev);
 	unsigned long dma_ctrl;
 	int ret;
+	u32 reg;
 
 	if (!netif_running(dev))
 		return 0;
@@ -3724,6 +3701,12 @@ static int bcmgenet_resume(struct device *d)
 	umac_enable_set(priv, CMD_TX_EN | CMD_RX_EN, false);
 
 	bcmgenet_set_hw_addr(priv, dev->dev_addr);
+
+	if (priv->internal_phy) {
+		reg = bcmgenet_ext_readl(priv, EXT_EXT_PWR_MGMT);
+		reg |= EXT_ENERGY_DET_MASK;
+		bcmgenet_ext_writel(priv, reg, EXT_EXT_PWR_MGMT);
+	}
 
 	if (priv->wolopts)
 		bcmgenet_power_up(priv, GENET_POWER_WOL_MAGIC);
@@ -3778,4 +3761,3 @@ MODULE_AUTHOR("Broadcom Corporation");
 MODULE_DESCRIPTION("Broadcom GENET Ethernet controller driver");
 MODULE_ALIAS("platform:bcmgenet");
 MODULE_LICENSE("GPL");
-MODULE_SOFTDEP("pre: mdio-bcm-unimac");

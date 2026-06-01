@@ -6,13 +6,10 @@ else
 	KERNEL_BUILD := 0
 endif
 
-
-
 ifeq ($(KERNEL_BUILD), 1)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
-	AUDIO_BLD_DIR := $(ANDROID_BUILD_TOP)/kernel/msm-4.14
-	AUDIO_ROOT := $(AUDIO_BLD_DIR)/techpack/audio
+	AUDIO_ROOT := techpack/audio
 endif
 
 ifeq ($(KERNEL_BUILD), 0)
@@ -113,3 +110,5 @@ endif
 # Module information used by KBuild framework
 obj-$(CONFIG_SND_SOC_TFA9874)    += tfa98xx_dlkm.o
 tfa98xx_dlkm-y := $(TFA98XX_OBJS)
+# inject some build related information
+DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

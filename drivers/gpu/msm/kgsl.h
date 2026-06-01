@@ -1,5 +1,4 @@
-/* Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved
+/* Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -84,11 +83,6 @@
 #define SCRATCH_RPTR_GPU_ADDR(dev, id) \
 	((dev)->scratch.gpuaddr + SCRATCH_RPTR_OFFSET(id))
 
-/* OFFSET to KMD postamble packets in scratch buffer */
-#define SCRATCH_POSTAMBLE_OFFSET (100 * sizeof(u64))
-#define SCRATCH_POSTAMBLE_ADDR(dev) \
-	((dev)->scratch.gpuaddr + SCRATCH_POSTAMBLE_OFFSET)
-
 /* Timestamp window used to detect rollovers (half of integer range) */
 #define KGSL_TIMESTAMP_WINDOW 0x80000000
 
@@ -125,7 +119,6 @@ struct kgsl_context;
  * @pagetable_list: LIst of open pagetables
  * @ptlock: Lock for accessing the pagetable list
  * @process_mutex: Mutex for accessing the process list
- * @proclist_lock: Lock for accessing the process list
  * @devlock: Mutex protecting the device list
  * @stats: Struct containing atomic memory statistics
  * @full_cache_threshold: the threshold that triggers a full cache flush
@@ -144,7 +137,6 @@ struct kgsl_driver {
 	struct list_head pagetable_list;
 	spinlock_t ptlock;
 	struct mutex process_mutex;
-	spinlock_t proclist_lock;
 	struct mutex devlock;
 	struct {
 		atomic_long_t vmalloc;
@@ -208,9 +200,11 @@ struct kgsl_memdesc_ops {
  * @pagetable: Pointer to the pagetable that the object is mapped in
  * @hostptr: Kernel virtual address
  * @hostptr_count: Number of threads using hostptr
+ * @useraddr: User virtual address (if applicable)
  * @gpuaddr: GPU virtual address
  * @physaddr: Physical address of the memory object
  * @size: Size of the memory object
+ * @mapsize: Size of memory mapped in userspace
  * @pad_to: Size that we pad the memdesc to
  * @priv: Internal flags and settings
  * @sgt: Scatter gather table for allocated pages
@@ -226,9 +220,11 @@ struct kgsl_memdesc {
 	struct kgsl_pagetable *pagetable;
 	void *hostptr;
 	unsigned int hostptr_count;
+	unsigned long useraddr;
 	uint64_t gpuaddr;
 	phys_addr_t physaddr;
 	uint64_t size;
+	atomic64_t mapsize;
 	uint64_t pad_to;
 	unsigned int priv;
 	struct sg_table *sgt;
@@ -239,11 +235,6 @@ struct kgsl_memdesc {
 	struct page **pages;
 	unsigned int page_count;
 	unsigned int cur_bindings;
-	/*
-	 * @lock: Spinlock to protect the gpuaddr from being accessed by
-	 * multiple entities trying to map the same SVM region at once
-	 */
-	spinlock_t lock;
 };
 
 /*
@@ -292,11 +283,6 @@ struct kgsl_mem_entry {
 	struct work_struct work;
 	spinlock_t bind_lock;
 	struct rb_root bind_tree;
-	/**
-	 * @map_count: Count how many vmas this object is mapped in - used for
-	 * debugfs accounting
-	 */
-	atomic_t map_count;
 };
 
 struct kgsl_device_private;
@@ -474,11 +460,6 @@ int kgsl_resume_driver(struct platform_device *pdev);
 struct kgsl_mem_entry *gpumem_alloc_entry(struct kgsl_device_private *dev_priv,
 				uint64_t size, uint64_t flags);
 long gpumem_free_entry(struct kgsl_mem_entry *entry);
-
-void kgsl_pwrctrl_max_clock_set(struct kgsl_device *device, int val);
-void kgsl_pwrctrl_min_pwrlevel_set(struct kgsl_device *device,
-					int level);
-unsigned int kgsl_pwrctrl_max_clock_get(struct kgsl_device *device);
 
 static inline int kgsl_gpuaddr_in_memdesc(const struct kgsl_memdesc *memdesc,
 				uint64_t gpuaddr, uint64_t size)

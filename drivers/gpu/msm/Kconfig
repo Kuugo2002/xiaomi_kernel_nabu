@@ -7,6 +7,7 @@ config QCOM_KGSL
 	select PM_DEVFREQ
 	select DEVFREQ_GOV_SIMPLE_ONDEMAND
 	select DEVFREQ_GOV_PERFORMANCE
+	select DEVFREQ_GOV_QCOM_ADRENO_TZ
 	select DEVFREQ_GOV_QCOM_GPUBW_MON
 	---help---
 	  3D graphics driver for the Adreno family of GPUs from QTI.

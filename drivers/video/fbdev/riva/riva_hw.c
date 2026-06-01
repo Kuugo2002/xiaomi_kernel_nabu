@@ -1242,7 +1242,8 @@ int CalcStateExt
 )
 {
     int pixelDepth;
-    int VClk, m, n, p;
+    int uninitialized_var(VClk),uninitialized_var(m),
+        uninitialized_var(n),	uninitialized_var(p);
 
     /*
      * Save mode parameters.

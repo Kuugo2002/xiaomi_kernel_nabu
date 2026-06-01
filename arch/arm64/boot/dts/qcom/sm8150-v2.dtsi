@@ -687,11 +687,11 @@
 			#size-cells = <0>;
 
 			qcom,speed-bin = <1>;
-			qcom,initial-pwrlevel = <7>;
+			qcom,initial-pwrlevel = <5>;
 
 			qcom,gpu-pwrlevel@0 {
 				reg = <0>;
-				qcom,gpu-freq = <692000000>;
+				qcom,gpu-freq = <675000000>;
 				qcom,bus-freq = <11>;
 				qcom,bus-min = <11>;
 				qcom,bus-max = <11>;
@@ -699,54 +699,46 @@
 
 			qcom,gpu-pwrlevel@1 {
 				reg = <1>;
-				qcom,gpu-freq = <675000000>;
-				qcom,bus-freq = <11>;
-				qcom,bus-min = <10>;
-				qcom,bus-max = <11>;
-			};
-
-			qcom,gpu-pwrlevel@2 {
-				reg = <2>;
 				qcom,gpu-freq = <585000000>;
 				qcom,bus-freq = <10>;
 				qcom,bus-min = <9>;
 				qcom,bus-max = <11>;
 			};
 
-			qcom,gpu-pwrlevel@3 {
-				reg = <3>;
+			qcom,gpu-pwrlevel@2 {
+				reg = <2>;
 				qcom,gpu-freq = <499200000>;
 				qcom,bus-freq = <9>;
 				qcom,bus-min = <8>;
 				qcom,bus-max = <11>;
 			};
 
-			qcom,gpu-pwrlevel@4 {
-				reg = <4>;
+			qcom,gpu-pwrlevel@3 {
+				reg = <3>;
 				qcom,gpu-freq = <427000000>;
 				qcom,bus-freq = <6>;
 				qcom,bus-min = <5>;
 				qcom,bus-max = <9>;
 			};
 
-			qcom,gpu-pwrlevel@5 {
-				reg = <5>;
+			qcom,gpu-pwrlevel@4 {
+				reg = <4>;
 				qcom,gpu-freq = <345000000>;
 				qcom,bus-freq = <4>;
 				qcom,bus-min = <3>;
 				qcom,bus-max = <5>;
 			};
 
-			qcom,gpu-pwrlevel@6 {
-				reg = <6>;
+			qcom,gpu-pwrlevel@5 {
+				reg = <5>;
 				qcom,gpu-freq = <257000000>;
 				qcom,bus-freq = <3>;
 				qcom,bus-min = <2>;
 				qcom,bus-max = <4>;
 			};
 
-			qcom,gpu-pwrlevel@7 {
-				reg = <7>;
+			qcom,gpu-pwrlevel@6 {
+				reg = <6>;
 				qcom,gpu-freq = <0>;
 				qcom,bus-freq = <0>;
 				qcom,bus-min = <0>;
@@ -1013,8 +1005,7 @@
 		<  768000 MHZ_TO_MBPS( 451, 4) >,
 		< 1113600 MHZ_TO_MBPS( 547, 4) >,
 		< 1478400 MHZ_TO_MBPS( 768, 4) >,
-		< 1632000 MHZ_TO_MBPS(1017, 4) >,
-		< 1785600 MHZ_TO_MBPS(1353, 4) >;
+		< 1632000 MHZ_TO_MBPS(1017, 4) >;
 };
 
 &cpu4_llcc_ddr_latmon {
@@ -1025,9 +1016,9 @@
 		< 1056000 MHZ_TO_MBPS( 768, 4) >,
 		< 1286400 MHZ_TO_MBPS(1017, 4) >,
 		< 1612800 MHZ_TO_MBPS(1353, 4) >,
-		< 2016000 MHZ_TO_MBPS(1555, 4) >,
-		< 2227200 MHZ_TO_MBPS(1804, 4) >,
-		< 2419200 MHZ_TO_MBPS(2092, 4) >;
+		< 1804800 MHZ_TO_MBPS(1555, 4) >,
+		< 2649600 MHZ_TO_MBPS(1804, 4) >,
+		< 3000000 MHZ_TO_MBPS(2092, 4) >;
 };
 
 &cpu0_cpu_l3_latmon {
@@ -1056,8 +1047,8 @@
 		< 1401600  998400000 >,
 		< 1708800 1267200000 >,
 		< 2016000 1344000000 >,
-		< 2227200 1536000000 >,
-		< 2419200 1612800000 >;
+		< 2419200 1536000000 >,
+		< 2841600 1612800000 >;
 };
 
 &cpu7_cpu_l3_latmon {
@@ -1069,7 +1060,7 @@
 		< 1708800 1267200000 >,
 		< 2016000 1344000000 >,
 		< 2419200 1536000000 >,
-		< 2956800 1612800000 >;
+		< 2841600 1612000000 >;
 };
 
 &cpu0_cpu_llcc_latmon {

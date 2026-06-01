@@ -156,9 +156,6 @@ static int __init acpi_parse_madt(struct acpi_table_header *table)
 		       madt->address);
 	}
 
-	if (madt->flags & ACPI_MADT_PCAT_COMPAT)
-		legacy_pic_pcat_compat();
-
 	default_acpi_madt_oem_check(madt->header.oem_id,
 				    madt->header.oem_table_id);
 
@@ -1346,17 +1343,6 @@ static int __init disable_acpi_pci(const struct dmi_system_id *d)
 	return 0;
 }
 
-static int __init disable_acpi_xsdt(const struct dmi_system_id *d)
-{
-	if (!acpi_force) {
-		pr_notice("%s detected: force use of acpi=rsdt\n", d->ident);
-		acpi_gbl_do_not_use_xsdt = TRUE;
-	} else {
-		pr_notice("Warning: DMI blacklist says broken, but acpi XSDT forced\n");
-	}
-	return 0;
-}
-
 static int __init dmi_disable_acpi(const struct dmi_system_id *d)
 {
 	if (!acpi_force) {
@@ -1477,19 +1463,6 @@ static const struct dmi_system_id acpi_dmi_table[] __initconst = {
 		     DMI_MATCH(DMI_PRODUCT_NAME, "TravelMate 360"),
 		     },
 	 },
-	/*
-	 * Boxes that need ACPI XSDT use disabled due to corrupted tables
-	 */
-	{
-	 .callback = disable_acpi_xsdt,
-	 .ident = "Advantech DAC-BJ01",
-	 .matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "NEC"),
-		     DMI_MATCH(DMI_PRODUCT_NAME, "Bearlake CRB Board"),
-		     DMI_MATCH(DMI_BIOS_VERSION, "V1.12"),
-		     DMI_MATCH(DMI_BIOS_DATE, "02/01/2011"),
-		     },
-	 },
 	{}
 };
 
@@ -1580,18 +1553,10 @@ void __init acpi_boot_table_init(void)
 	/*
 	 * Initialize the ACPI boot-time table parser.
 	 */
-	if (acpi_locate_initial_tables())
+	if (acpi_table_init()) {
 		disable_acpi();
-	else
-		acpi_reserve_initial_tables();
-}
-
-int __init early_acpi_boot_init(void)
-{
-	if (acpi_disabled)
-		return 1;
-
-	acpi_table_init_complete();
+		return;
+	}
 
 	acpi_table_parse(ACPI_SIG_BOOT, acpi_parse_sbf);
 
@@ -1604,9 +1569,18 @@ int __init early_acpi_boot_init(void)
 		} else {
 			printk(KERN_WARNING PREFIX "Disabling ACPI support\n");
 			disable_acpi();
-			return 1;
+			return;
 		}
 	}
+}
+
+int __init early_acpi_boot_init(void)
+{
+	/*
+	 * If acpi_disabled, bail out
+	 */
+	if (acpi_disabled)
+		return 1;
 
 	/*
 	 * Process the Multiple APIC Description Table (MADT), if present

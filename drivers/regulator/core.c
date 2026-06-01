@@ -1067,6 +1067,7 @@ static int _regulator_do_enable(struct regulator_dev *rdev);
 /**
  * set_machine_constraints - sets regulator constraints
  * @rdev: regulator source
+ * @constraints: constraints to apply
  *
  * Allows platform initialisation code to define and constrain
  * regulator circuits e.g. valid voltage/current ranges, etc.  NOTE:
@@ -1074,10 +1075,20 @@ static int _regulator_do_enable(struct regulator_dev *rdev);
  * regulator operations to proceed i.e. set_voltage, set_current_limit,
  * set_mode.
  */
-static int set_machine_constraints(struct regulator_dev *rdev)
+static int set_machine_constraints(struct regulator_dev *rdev,
+	const struct regulation_constraints *constraints)
 {
 	int ret = 0;
 	const struct regulator_ops *ops = rdev->desc->ops;
+
+	if (constraints)
+		rdev->constraints = kmemdup(constraints, sizeof(*constraints),
+					    GFP_KERNEL);
+	else
+		rdev->constraints = kzalloc(sizeof(*constraints),
+					    GFP_KERNEL);
+	if (!rdev->constraints)
+		return -ENOMEM;
 
 	ret = machine_constraints_voltage(rdev, rdev->constraints);
 	if (ret != 0)
@@ -1122,12 +1133,6 @@ static int set_machine_constraints(struct regulator_dev *rdev)
 	 * and we have control then make sure it is enabled.
 	 */
 	if (rdev->constraints->always_on || rdev->constraints->boot_on) {
-		/* If we want to enable this regulator, make sure that we know
-		 * the supplying regulator.
-		 */
-		if (rdev->supply_name && !rdev->supply)
-			return -EPROBE_DEFER;
-
 		ret = _regulator_do_enable(rdev);
 		if (ret < 0 && ret != -EINVAL) {
 			rdev_err(rdev, "failed to enable\n");
@@ -1205,7 +1210,6 @@ static int set_supply(struct regulator_dev *rdev,
 
 	rdev->supply = create_regulator(supply_rdev, &rdev->dev, "SUPPLY");
 	if (rdev->supply == NULL) {
-		module_put(supply_rdev->owner);
 		err = -ENOMEM;
 		return err;
 	}
@@ -1511,7 +1515,6 @@ static struct regulator_dev *regulator_dev_lookup(struct device *dev,
 		node = of_get_regulator(dev, supply);
 		if (node) {
 			r = of_find_regulator_by_node(node);
-			of_node_put(node);
 			if (r)
 				return r;
 
@@ -1582,15 +1585,6 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 				rdev->supply_name, rdev->desc->name);
 			return -EPROBE_DEFER;
 		}
-	}
-
-	if (r == rdev) {
-		dev_err(dev, "Supply for %s (%s) resolved to itself\n",
-			rdev->desc->name, rdev->supply_name);
-		if (!have_full_constraints())
-			return -EINVAL;
-		r = dummy_regulator_rdev;
-		get_device(&r->dev);
 	}
 
 	/*
@@ -3285,8 +3279,6 @@ static int _regulator_get_voltage(struct regulator_dev *rdev)
 		ret = rdev->desc->fixed_uV;
 	} else if (rdev->supply) {
 		ret = _regulator_get_voltage(rdev->supply->rdev);
-	} else if (rdev->supply_name) {
-		return -EPROBE_DEFER;
 	} else {
 		return -EINVAL;
 	}
@@ -4277,7 +4269,7 @@ static void rdev_init_debugfs(struct regulator_dev *rdev)
 	}
 
 	rdev->debugfs = debugfs_create_dir(rname, debugfs_root);
-	if (IS_ERR(rdev->debugfs)) {
+	if (!rdev->debugfs) {
 		rdev_warn(rdev, "Failed to create debugfs directory\n");
 		return;
 	}
@@ -4380,6 +4372,7 @@ struct regulator_dev *
 regulator_register(const struct regulator_desc *regulator_desc,
 		   const struct regulator_config *cfg)
 {
+	const struct regulation_constraints *constraints = NULL;
 	const struct regulator_init_data *init_data;
 	struct regulator_config *config = NULL;
 	static atomic_t regulator_no = ATOMIC_INIT(-1);
@@ -4479,36 +4472,22 @@ regulator_register(const struct regulator_desc *regulator_desc,
 
 	/* set regulator constraints */
 	if (init_data)
-		rdev->constraints = kmemdup(&init_data->constraints,
-					    sizeof(*rdev->constraints),
-					    GFP_KERNEL);
-	else
-		rdev->constraints = kzalloc(sizeof(*rdev->constraints),
-					    GFP_KERNEL);
-	if (!rdev->constraints) {
-		ret = -ENOMEM;
-		goto wash;
-	}
+		constraints = &init_data->constraints;
 
 	if (init_data && init_data->supply_regulator)
 		rdev->supply_name = init_data->supply_regulator;
 	else if (regulator_desc->supply_name)
 		rdev->supply_name = regulator_desc->supply_name;
 
-	ret = set_machine_constraints(rdev);
-	if (ret == -EPROBE_DEFER) {
-		/* Regulator might be in bypass mode and so needs its supply
-		 * to set the constraints */
-		/* FIXME: this currently triggers a chicken-and-egg problem
-		 * when creating -SUPPLY symlink in sysfs to a regulator
-		 * that is just being created */
-		ret = regulator_resolve_supply(rdev);
-		if (!ret)
-			ret = set_machine_constraints(rdev);
-		else
-			rdev_dbg(rdev, "unable to resolve supply early: %pe\n",
-				 ERR_PTR(ret));
-	}
+	/*
+	 * Attempt to resolve the regulator supply, if specified,
+	 * but don't return an error if we fail because we will try
+	 * to resolve it again later as more regulators are added.
+	 */
+	if (regulator_resolve_supply(rdev))
+		rdev_dbg(rdev, "unable to resolve supply\n");
+
+	ret = set_machine_constraints(rdev, constraints);
 	if (ret < 0)
 		goto wash;
 
@@ -4972,7 +4951,7 @@ static int __init regulator_init(void)
 	ret = class_register(&regulator_class);
 
 	debugfs_root = debugfs_create_dir("regulator", NULL);
-	if (IS_ERR(debugfs_root))
+	if (!debugfs_root)
 		pr_warn("regulator: Failed to create debugfs directory\n");
 
 	debugfs_create_file("supply_map", 0444, debugfs_root, NULL,

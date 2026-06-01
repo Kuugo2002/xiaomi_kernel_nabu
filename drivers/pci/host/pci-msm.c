@@ -6789,9 +6789,7 @@ static struct platform_driver msm_pcie_driver = {
 static int __init pcie_init(void)
 {
 	int ret = 0, i;
-#ifdef CONFIG_IPC_LOGGING
 	char rc_name[MAX_RC_NAME_LEN];
-#endif
 
 	pr_alert("pcie:%s.\n", __func__);
 
@@ -6799,7 +6797,6 @@ static int __init pcie_init(void)
 	mutex_init(&pcie_drv.drv_lock);
 
 	for (i = 0; i < MAX_RC_NUM; i++) {
-#ifdef CONFIG_IPC_LOGGING
 		snprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-short", i);
 		msm_pcie_dev[i].ipc_log =
 			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
@@ -6830,7 +6827,6 @@ static int __init pcie_init(void)
 			PCIE_DBG(&msm_pcie_dev[i],
 				"PCIe IPC logging %s is enable for RC%d\n",
 				rc_name, i);
-#endif
 		spin_lock_init(&msm_pcie_dev[i].cfg_lock);
 		msm_pcie_dev[i].cfg_access = true;
 		mutex_init(&msm_pcie_dev[i].enumerate_lock);
@@ -7161,8 +7157,7 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 {
 	int ret = 0;
 	struct pci_dev *dev;
-	u32 rc_idx = 0, count = 0;
-	u16 device_id;
+	u32 rc_idx = 0;
 	struct msm_pcie_dev_t *pcie_dev;
 
 	PCIE_GEN_DBG("PCIe: pm_opt:%d;busnr:%d;options:%d\n",
@@ -7252,23 +7247,6 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 				"PCIe: RC%d: requested to resume when link is not disabled:%d. Number of active EP(s): %d\n",
 				rc_idx, msm_pcie_dev[rc_idx].link_status,
 				msm_pcie_dev[rc_idx].num_active_ep);
-			pci_read_config_word((struct pci_dev *)user,
-						PCI_DEVICE_ID, &device_id);
-			while (device_id != (((struct pci_dev *)user)->device)
-					&& count < LINK_UP_CHECK_MAX_COUNT) {
-				usleep_range(LINK_UP_TIMEOUT_US_MIN,
-						LINK_UP_TIMEOUT_US_MAX);
-				pci_read_config_word((struct pci_dev *)user,
-						PCI_DEVICE_ID, &device_id);
-				PCIE_DBG(&msm_pcie_dev[rc_idx],
-					"PCIe: RC:%d, device_id_read:0x%x\n",
-					rc_idx, device_id);
-				count++;
-			}
-			if (count >= LINK_UP_CHECK_MAX_COUNT)
-				PCIE_ERR(&msm_pcie_dev[rc_idx],
-					"PCIe: RC:%d invalid device id\n",
-					rc_idx);
 			break;
 		}
 

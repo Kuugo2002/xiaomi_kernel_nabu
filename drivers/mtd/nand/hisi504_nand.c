@@ -823,7 +823,7 @@ static int hisi_nfc_probe(struct platform_device *pdev)
 	return 0;
 
 err_mtd:
-	nand_release(chip);
+	nand_release(mtd);
 err_res:
 	return ret;
 }
@@ -831,8 +831,9 @@ err_res:
 static int hisi_nfc_remove(struct platform_device *pdev)
 {
 	struct hinfc_host *host = platform_get_drvdata(pdev);
+	struct mtd_info *mtd = nand_to_mtd(&host->chip);
 
-	nand_release(&host->chip);
+	nand_release(mtd);
 
 	return 0;
 }

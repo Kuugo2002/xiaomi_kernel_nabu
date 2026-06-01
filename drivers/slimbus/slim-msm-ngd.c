@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2019, 2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -176,7 +176,8 @@ static int ngd_slim_qmi_new_server(struct qmi_handle *hdl,
 	qmi->svc_info.sq_family = AF_QIPCRTR;
 	qmi->svc_info.sq_node = service->node;
 	qmi->svc_info.sq_port = service->port;
-	complete(&dev->qmi_up);
+	atomic_set(&dev->ssr_in_progress, 0);
+	schedule_work(&dev->dsp.dom_up);
 
 	return 0;
 }
@@ -186,10 +187,7 @@ static void ngd_slim_qmi_del_server(struct qmi_handle *hdl,
 {
 	struct msm_slim_qmi *qmi =
 		container_of(hdl, struct msm_slim_qmi, svc_event_hdl);
-	struct msm_slim_ctrl *dev =
-		container_of(qmi, struct msm_slim_ctrl, qmi);
 
-	reinit_completion(&dev->qmi_up);
 	qmi->svc_info.sq_node = 0;
 	qmi->svc_info.sq_port = 0;
 }
@@ -265,7 +263,7 @@ static int dsp_domr_notify_cb(struct notifier_block *n, unsigned long code,
 	switch (code) {
 	case SUBSYS_BEFORE_SHUTDOWN:
 	case SERVREG_NOTIF_SERVICE_STATE_DOWN_V01:
-		SLIM_INFO(dev, "SLIM DSP SSR notify cb:0x%lx\n", code);
+		SLIM_INFO(dev, "SLIM DSP SSR notify cb:%lu\n", code);
 		atomic_set(&dev->ssr_in_progress, 1);
 		/* wait for current transaction */
 		mutex_lock(&dev->tx_lock);
@@ -276,12 +274,6 @@ static int dsp_domr_notify_cb(struct notifier_block *n, unsigned long code,
 		msm_slim_sps_exit(dev, false);
 		ngd_dom_down(dev);
 		mutex_unlock(&dev->tx_lock);
-		break;
-	case SUBSYS_AFTER_POWERUP:
-	case SERVREG_NOTIF_SERVICE_STATE_UP_V01:
-		SLIM_INFO(dev, "SLIM DSP SSR notify cb:0x%x\n", code);
-		atomic_set(&dev->ssr_in_progress, 0);
-		schedule_work(&dev->dsp.dom_up);
 		break;
 	case LOCATOR_UP:
 		reg = _cmd;
@@ -302,15 +294,9 @@ static int dsp_domr_notify_cb(struct notifier_block *n, unsigned long code,
 				&cur);
 		SLIM_INFO(dev, "reg-PD client:%s with service:%s\n",
 				reg->client_name, reg->service_name);
-		SLIM_INFO(dev, "reg-PD dom:%s instance:%d, cur:0x%x\n",
+		SLIM_INFO(dev, "reg-PD dom:%s instance:%d, cur:%d\n",
 				reg->domain_list->name,
 				reg->domain_list->instance_id, cur);
-
-		if (cur == SERVREG_NOTIF_SERVICE_STATE_UP_V01) {
-			atomic_set(&dev->ssr_in_progress, 0);
-			schedule_work(&dev->dsp.dom_up);
-		}
-
 		if (IS_ERR_OR_NULL(dev->dsp.domr))
 			ngd_reg_ssr(dev);
 		else
@@ -1636,7 +1622,6 @@ static int ngd_notify_slaves(void *data)
 		pr_err("Slimbus QMI service registration failed:%d", ret);
 		return ret;
 	}
-	ngd_dom_init(dev);
 
 	while (!kthread_should_stop()) {
 		wait_for_completion_interruptible(&dev->qmi.slave_notify);
@@ -1652,6 +1637,7 @@ static int ngd_notify_slaves(void *data)
 			 * controller is up
 			 */
 			slim_ctrl_add_boarddevs(&dev->ctrl);
+			ngd_dom_init(dev);
 		} else {
 			slim_framer_booted(ctrl);
 		}
@@ -1697,10 +1683,6 @@ static void ngd_dom_up(struct work_struct *work)
 		container_of(work, struct msm_slim_ss, dom_up);
 	struct msm_slim_ctrl *dev =
 		container_of(dsp, struct msm_slim_ctrl, dsp);
-
-	/* Make sure qmi service is up before continuing */
-	wait_for_completion_interruptible(&dev->qmi_up);
-
 	mutex_lock(&dev->ssr_lock);
 	ngd_slim_enable(dev, true);
 	mutex_unlock(&dev->ssr_lock);
@@ -1831,7 +1813,6 @@ static int ngd_slim_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dev);
 	slim_set_ctrldata(&dev->ctrl, dev);
 
-#ifdef CONFIG_IPC_LOGGING
 	/* Create IPC log context */
 	dev->ipc_slimbus_log = ipc_log_context_create(IPC_SLIMBUS_LOG_PAGES,
 						dev_name(dev->dev), 0);
@@ -1844,13 +1825,11 @@ static int ngd_slim_probe(struct platform_device *pdev)
 		SLIM_INFO(dev, "start logging for slim dev %s\n",
 				dev_name(dev->dev));
 	}
-#endif
 
 	/* Create Error IPC log context */
 	memset(ipc_err_log_name, 0, sizeof(ipc_err_log_name));
 	scnprintf(ipc_err_log_name, sizeof(ipc_err_log_name), "%s%s",
 						dev_name(dev->dev), "_err");
-#ifdef CONFIG_IPC_LOGGING
 	dev->ipc_slimbus_log_err =
 		ipc_log_context_create(IPC_SLIMBUS_LOG_PAGES,
 						ipc_err_log_name, 0);
@@ -1860,7 +1839,7 @@ static int ngd_slim_probe(struct platform_device *pdev)
 	else
 		SLIM_INFO(dev, "start error logging for slim dev %s\n",
 							ipc_err_log_name);
-#endif
+
 	ret = sysfs_create_file(&dev->dev->kobj, &dev_attr_debug_mask.attr);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to create dev. attr\n");
@@ -1943,7 +1922,6 @@ static int ngd_slim_probe(struct platform_device *pdev)
 
 	init_completion(&dev->reconf);
 	init_completion(&dev->ctrl_up);
-	init_completion(&dev->qmi_up);
 	mutex_init(&dev->tx_lock);
 	mutex_init(&dev->ssr_lock);
 	spin_lock_init(&dev->tx_buf_lock);

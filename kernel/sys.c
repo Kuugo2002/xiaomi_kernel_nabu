@@ -72,7 +72,6 @@
 #include <linux/uaccess.h>
 #include <asm/io.h>
 #include <asm/unistd.h>
-#include <linux/string_helpers.h>
 
 #ifndef SET_UNALIGN_CTL
 # define SET_UNALIGN_CTL(a, b)	(-EINVAL)
@@ -838,77 +837,6 @@ change_okay:
 #endif /* CONFIG_MULTIUSER */
 
 /**
- * This syscall takes each PCB's information and saves them in user space.
- * 
- * @task_simply_struct:
- * 		- pid: process id
- * 		- comm: name without path
- *		- RSS end virtual size
- * 
- * @task: is an address for an array in user space
- * @size: size of array
- */
-SYSCALL_DEFINE2(process_list, struct task_simply_struct *, task, size_t, size)
-{
-	struct task_struct *ftask;
-	struct task_simply_struct new_save;
-	long nr_process = 0;
-	struct mm_struct *mm;
-	char *pathname, *tmp;
-	char *packages; // android packages
-
-	if (!task || !access_ok(VERIFY_WRITE, task, size * sizeof(struct task_simply_struct)))
-	    return -EFAULT;
-
-	for_each_process(ftask) {
-
-		// check if size designed is valid
-		if (nr_process >= size)
-			break;
-
-		new_save.pid = ftask->pid;
-
-		packages = kstrdup_quotable_cmdline(ftask, GFP_KERNEL);
-		if (packages != NULL && packages[0] != '\0') {
-			strncpy(new_save.name, packages, sizeof(new_save.name));
-		} else {
-			/* get path name from mm struct process. */
-			mm = get_task_mm(ftask);
-			tmp = (char *)__get_free_page(GFP_KERNEL);
-			if (mm && mm->exe_file) {
-				pathname = d_path(&mm->exe_file->f_path, tmp, PAGE_SIZE);
-				if (!IS_ERR(pathname)) {
-					strncpy(new_save.name, pathname, sizeof(new_save.name));
-				}
-				mmput(mm);
-			}
-			free_page((unsigned long)tmp);
-		}
-
-		if (packages != NULL)
-			kfree(packages);
-
-		// just for safe work
-		new_save.name[sizeof(new_save.name) - 1] = '\0';
-
-#ifdef CONFIG_TASK_XACCT
-		new_save.acct_rss_mem1 = ftask->acct_rss_mem1;
-		new_save.acct_vm_mem1 = ftask->acct_vm_mem1;
-#else
-		new_save.acct_rss_mem1 = 0;
-		new_save.acct_vm_mem1 = 0;
-#endif
-
-		if (copy_to_user(&task[nr_process], &new_save, sizeof(new_save)) != 0)
-			return -EFAULT;
-
-		nr_process++;
-	}
-
-	return nr_process;
-}
-
-/**
  * sys_getpid - return the thread group id of the current process
  *
  * Note, despite the name, this returns the tgid not the pid.  The tgid and
@@ -1260,6 +1188,13 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
+	if (!strncmp(current->comm, "bpfloader", 9) ||
+	    !strncmp(current->comm, "netbpfload", 10) ||
+	    !strncmp(current->comm, "netd", 4)) {
+		strcpy(tmp.release, "4.19.280");
+		pr_debug("uname: %s release=%s\n",
+			 current->comm, tmp.release);
+	}
 	up_read(&uts_sem);
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
@@ -1297,12 +1232,10 @@ SYSCALL_DEFINE1(uname, struct old_utsname __user *, name)
 
 SYSCALL_DEFINE1(olduname, struct oldold_utsname __user *, name)
 {
-	struct oldold_utsname tmp;
+	struct oldold_utsname tmp = {};
 
 	if (!name)
 		return -EFAULT;
-
-	memset(&tmp, 0, sizeof(tmp));
 
 	down_read(&uts_sem);
 	memcpy(&tmp.sysname, &utsname()->sysname, __OLD_UTS_LEN);
@@ -1552,8 +1485,6 @@ int do_prlimit(struct task_struct *tsk, unsigned int resource,
 
 	if (resource >= RLIM_NLIMITS)
 		return -EINVAL;
-	resource = array_index_nospec(resource, RLIM_NLIMITS);
-
 	if (new_rlim) {
 		if (new_rlim->rlim_cur > new_rlim->rlim_max)
 			return -EINVAL;
@@ -1954,6 +1885,13 @@ static int validate_prctl_map(struct prctl_mm_map *prctl_map)
 #undef __prctl_check_order
 
 	error = -EINVAL;
+
+	/*
+	 * @brk should be after @end_data in traditional maps.
+	 */
+	if (prctl_map->start_brk <= prctl_map->end_data ||
+	    prctl_map->brk <= prctl_map->end_data)
+		goto out;
 
 	/*
 	 * Neither we should allow to override limits if they set.

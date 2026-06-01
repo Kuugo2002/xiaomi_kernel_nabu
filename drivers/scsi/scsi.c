@@ -351,18 +351,11 @@ static int scsi_vpd_inquiry(struct scsi_device *sdev, unsigned char *buffer,
 	if (result)
 		return -EIO;
 
-	/*
-	 * Sanity check that we got the page back that we asked for and that
-	 * the page size is not 0.
-	 */
+	/* Sanity check that we got the page back that we asked for */
 	if (buffer[1] != page)
 		return -EIO;
 
-	result = get_unaligned_be16(&buffer[2]);
-	if (!result)
-		return -EIO;
-
-	return result + 4;
+	return get_unaligned_be16(&buffer[2]) + 4;
 }
 
 /**
@@ -582,10 +575,8 @@ EXPORT_SYMBOL(scsi_device_get);
  */
 void scsi_device_put(struct scsi_device *sdev)
 {
-	struct module *mod = sdev->host->hostt->module;
-
+	module_put(sdev->host->hostt->module);
 	put_device(&sdev->sdev_gendev);
-	module_put(mod);
 }
 EXPORT_SYMBOL(scsi_device_put);
 
@@ -788,8 +779,12 @@ MODULE_LICENSE("GPL");
 
 module_param(scsi_logging_level, int, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(scsi_logging_level, "a bit mask of logging levels");
+
+#ifdef CONFIG_SCSI_MQ_DEFAULT
 bool scsi_use_blk_mq = true;
-EXPORT_SYMBOL_GPL(scsi_use_blk_mq);
+#else
+bool scsi_use_blk_mq = false;
+#endif
 module_param_named(use_blk_mq, scsi_use_blk_mq, bool, S_IWUSR | S_IRUGO);
 
 static int __init init_scsi(void)

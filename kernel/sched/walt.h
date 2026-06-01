@@ -26,11 +26,6 @@
 
 #define EXITING_TASK_MARKER	0xdeaddead
 
-#define WALT_CPUFREQ_CONTINUE		(1U << 1)
-#define WALT_CPUFREQ_IC_MIGRATION	(1U << 2)
-#define WALT_CPUFREQ_PL			(1U << 3)
-#define WALT_CPUFREQ_BOOST_UPDATE	(1U << 5)
-
 #define FREQ_REPORT_MAX_CPU_LOAD_TOP_TASK	0
 #define FREQ_REPORT_CPU_LOAD			1
 #define FREQ_REPORT_TOP_TASK			2
@@ -62,10 +57,6 @@ extern void update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 						u64 wallclock, u64 irqtime);
 
 extern unsigned int walt_big_tasks(int cpu);
-
-struct waltgov_callback {
-	void (*func)(struct waltgov_callback *cb, u64 time, unsigned int flags);
-};
 
 static inline void
 inc_nr_big_task(struct walt_sched_stats *stats, struct task_struct *p)

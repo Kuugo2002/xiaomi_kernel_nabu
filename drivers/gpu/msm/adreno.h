@@ -1,5 +1,4 @@
 /* Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -264,9 +263,6 @@ struct adreno_gpudev;
 /* Time to allow preemption to complete (in ms) */
 #define ADRENO_PREEMPT_TIMEOUT 10000
 
-#define PREEMPT_SCRATCH_ADDR(dev, id) \
-	((dev)->preempt.scratch.gpuaddr + (id * sizeof(u64)))
-
 #define ADRENO_INT_BIT(a, _bit) (((a)->gpucore->gpudev->int_bits) ? \
 		(adreno_get_int(a, _bit) < 0 ? 0 : \
 		BIT(adreno_get_int(a, _bit))) : 0)
@@ -303,7 +299,6 @@ enum adreno_preempt_states {
  * skipsaverestore: To skip saverestore during L1 preemption (for 6XX)
  * usesgmem: enable GMEM save/restore across preemption (for 6XX)
  * count: Track the number of preemptions triggered
- * @postamble_len: Number of dwords in KMD postamble pm4 packet
  */
 struct adreno_preemption {
 	atomic_t state;
@@ -315,7 +310,6 @@ struct adreno_preemption {
 	bool skipsaverestore;
 	bool usesgmem;
 	unsigned int count;
-	u32 postamble_len;
 };
 
 
@@ -437,13 +431,12 @@ struct adreno_gpu_core {
 	unsigned int cx_ipeak_gpu_freq;
 };
 
-#ifdef CONFIG_CORESIGHT
+
 enum gpu_coresight_sources {
 	GPU_CORESIGHT_GX = 0,
 	GPU_CORESIGHT_CX = 1,
 	GPU_CORESIGHT_MAX,
 };
-#endif
 
 /**
  * struct adreno_device - The mothership structure for all adreno related info
@@ -597,9 +590,7 @@ struct adreno_device {
 	unsigned int speed_bin;
 	unsigned int quirks;
 
-	#ifdef CONFIG_CORESIGHT
 	struct coresight_device *csdev[GPU_CORESIGHT_MAX];
-	#endif
 	uint32_t gpmu_throttle_counters[ADRENO_GPMU_THROTTLE_COUNTERS];
 	struct work_struct irq_storm_work;
 
@@ -613,11 +604,6 @@ struct adreno_device {
 	void *zap_handle_ptr;
 	unsigned int soc_hw_rev;
 	bool gaming_bin;
-	/*
-	 * @perfcounter: Flag to clear perfcounters across contexts and
-	 * controls perfcounter ioctl read
-	 */
-	bool perfcounter;
 };
 
 /**
@@ -860,7 +846,6 @@ struct adreno_vbif_snapshot_registers {
 	const int count;
 };
 
-#ifdef CONFIG_CORESIGHT
 /**
  * struct adreno_coresight_register - Definition for a coresight (tracebus)
  * debug register
@@ -914,7 +899,7 @@ struct adreno_coresight {
 	void (*write)(struct kgsl_device *device,
 		unsigned int offsetwords, unsigned int value);
 };
-#endif /* CONFIG_CORESIGHT */
+
 
 struct adreno_irq_funcs {
 	void (*func)(struct adreno_device *, int);
@@ -986,9 +971,7 @@ struct adreno_gpudev {
 	const struct adreno_invalid_countables *invalid_countables;
 	struct adreno_snapshot_data *snapshot_data;
 
-	#ifdef CONFIG_CORESIGHT
 	struct adreno_coresight *coresight[GPU_CORESIGHT_MAX];
-	#endif
 
 	struct adreno_irq *irq;
 	int num_prio_levels;
@@ -1138,11 +1121,9 @@ extern unsigned int *adreno_ft_regs;
 extern unsigned int adreno_ft_regs_num;
 extern unsigned int *adreno_ft_regs_val;
 
-#ifdef ADRENO_IS_NOT_6XX
 extern struct adreno_gpudev adreno_a3xx_gpudev;
 extern struct adreno_gpudev adreno_a4xx_gpudev;
 extern struct adreno_gpudev adreno_a5xx_gpudev;
-#endif
 extern struct adreno_gpudev adreno_a6xx_gpudev;
 
 extern int adreno_wake_nice;
@@ -1156,12 +1137,9 @@ long adreno_ioctl(struct kgsl_device_private *dev_priv,
 long adreno_ioctl_helper(struct kgsl_device_private *dev_priv,
 		unsigned int cmd, unsigned long arg,
 		const struct kgsl_ioctl *cmds, int len);
-#ifdef ADRENO_IS_NOT_6XX
+
 int a5xx_critical_packet_submit(struct adreno_device *adreno_dev,
 		struct adreno_ringbuffer *rb);
-#else
-#define a5xx_critical_packet_submit(...) 0
-#endif
 int adreno_set_unsecured_mode(struct adreno_device *adreno_dev,
 		struct adreno_ringbuffer *rb);
 void adreno_spin_idle_debug(struct adreno_device *adreno_dev, const char *str);
@@ -1187,14 +1165,12 @@ void adreno_fault_skipcmd_detached(struct adreno_device *adreno_dev,
 					 struct adreno_context *drawctxt,
 					 struct kgsl_drawobj *drawobj);
 
-#ifdef CONFIG_CORESIGHT
 int adreno_coresight_init(struct adreno_device *adreno_dev);
 
 void adreno_coresight_start(struct adreno_device *adreno_dev);
 void adreno_coresight_stop(struct adreno_device *adreno_dev);
 
 void adreno_coresight_remove(struct adreno_device *adreno_dev);
-#endif
 
 bool adreno_hw_isidle(struct adreno_device *adreno_dev);
 

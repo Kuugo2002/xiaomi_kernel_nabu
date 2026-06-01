@@ -642,27 +642,6 @@ static void schedtune_attach(struct cgroup_taskset *tset)
 }
 #endif
 
-struct groups_data {
-	const char *name;
-	s64 boost;
-} static blocked_groups[] = {
-	{"top-app", 20}
-};
-
-static int block_user_action(struct cgroup_subsys_state *css)
-{
-	unsigned int i;
-
-	for (i = 0; i < ARRAY_SIZE(blocked_groups); ++i) {
-		if (!strcmp(css->cgroup->kn->name, blocked_groups[i].name)) {
-			pr_info("%s: Can't write on %s\n", __func__, css->cgroup->kn->name);
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
 static int
 boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	    s64 boost)
@@ -678,17 +657,6 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	schedtune_boostgroup_update(st->idx, st->boost);
 
 	return 0;
-}
-
-static int
-boot_write_wrapper(struct cgroup_subsys_state *css, struct cftype *cft,
-	    s64 boost)
-{
-	/**
-	 * User can't bypass this as filter.
-	 * For change value in kernel we can invoke directly boost_write().
-	 */
-	return block_user_action(css) ? -EPERM : boost_write(css, cft, boost);
 }
 
 static struct cftype files[] = {
@@ -707,7 +675,7 @@ static struct cftype files[] = {
 	{
 		.name = "boost",
 		.read_s64 = boost_read,
-		.write_s64 = boot_write_wrapper,
+		.write_s64 = boost_write,
 	},
 	{
 		.name = "prefer_idle",
@@ -737,18 +705,6 @@ schedtune_boostgroup_init(struct schedtune *st)
 	return 0;
 }
 
-static void cgroup_default_value(struct cgroup_subsys_state *css)
-{
-	unsigned int i;
-
-	for (i = 0; i < ARRAY_SIZE(blocked_groups); ++i) {
-		if (!strcmp(css->cgroup->kn->name, blocked_groups[i].name)) {
-			pr_info("%s: setting default value for: %s\n", __func__, css->cgroup->kn->name);
-			boost_write(css, NULL, blocked_groups[i].boost);
-		}
-	}
-}
-
 static struct cgroup_subsys_state *
 schedtune_css_alloc(struct cgroup_subsys_state *parent_css)
 {
@@ -765,13 +721,9 @@ schedtune_css_alloc(struct cgroup_subsys_state *parent_css)
 	}
 
 	/* Allow only a limited number of boosting groups */
-	for (idx = 1; idx < BOOSTGROUPS_COUNT; ++idx) {
+	for (idx = 1; idx < BOOSTGROUPS_COUNT; ++idx)
 		if (!allocated_group[idx])
 			break;
-
-		cgroup_default_value(&allocated_group[idx]->css);
-	}
-
 	if (idx == BOOSTGROUPS_COUNT) {
 		pr_err("Trying to create more than %d SchedTune boosting groups\n",
 		       BOOSTGROUPS_COUNT);

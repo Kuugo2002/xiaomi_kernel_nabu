@@ -4852,8 +4852,8 @@ static int binder_thread_release(struct binder_proc *proc,
 	 * If this thread used poll, make sure we remove the waitqueue from any
 	 * poll data structures holding it.
 	 */
-	if (thread->looper & BINDER_LOOPER_STATE_POLL)
-		wake_up_pollfree(&thread->wait);
+	// if (thread->looper & BINDER_LOOPER_STATE_POLL)
+	// 	wake_up_pollfree(&thread->wait);
 
 	binder_inner_proc_unlock(thread->proc);
 

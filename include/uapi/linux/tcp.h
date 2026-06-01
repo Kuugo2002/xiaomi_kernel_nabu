@@ -222,6 +222,7 @@ struct tcp_info {
 	__u64	tcpi_busy_time;      /* Time (usec) busy sending data */
 	__u64	tcpi_rwnd_limited;   /* Time (usec) limited by receive window */
 	__u64	tcpi_sndbuf_limited; /* Time (usec) limited by send buffer */
+	__u32	tcpi_seq_rtt;
 };
 
 /* netlink attributes types for SCM_TIMESTAMPING_OPT_STATS */

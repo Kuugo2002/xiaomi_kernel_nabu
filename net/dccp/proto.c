@@ -171,18 +171,12 @@ const char *dccp_packet_name(const int type)
 
 EXPORT_SYMBOL_GPL(dccp_packet_name);
 
-void dccp_destruct_common(struct sock *sk)
+static void dccp_sk_destruct(struct sock *sk)
 {
 	struct dccp_sock *dp = dccp_sk(sk);
 
 	ccid_hc_tx_delete(dp->dccps_hc_tx_ccid, sk);
 	dp->dccps_hc_tx_ccid = NULL;
-}
-EXPORT_SYMBOL_GPL(dccp_destruct_common);
-
-static void dccp_sk_destruct(struct sock *sk)
-{
-	dccp_destruct_common(sk);
 	inet_sock_destruct(sk);
 }
 
@@ -645,7 +639,7 @@ static int do_dccp_getsockopt(struct sock *sk, int level, int optname,
 		return dccp_getsockopt_service(sk, len,
 					       (__be32 __user *)optval, optlen);
 	case DCCP_SOCKOPT_GET_CUR_MPS:
-		val = READ_ONCE(dp->dccps_mss_cache);
+		val = dp->dccps_mss_cache;
 		break;
 	case DCCP_SOCKOPT_AVAILABLE_CCIDS:
 		return ccid_getsockopt_builtin_ccids(sk, len, optval, optlen);
@@ -765,10 +759,15 @@ int dccp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	int rc, size;
 	long timeo;
 
-	if (len > READ_ONCE(dp->dccps_mss_cache))
+	if (len > dp->dccps_mss_cache)
 		return -EMSGSIZE;
 
 	lock_sock(sk);
+
+	if (dccp_qpolicy_full(sk)) {
+		rc = -EAGAIN;
+		goto out_release;
+	}
 
 	timeo = sock_sndtimeo(sk, noblock);
 
@@ -788,19 +787,8 @@ int dccp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	if (skb == NULL)
 		goto out_release;
 
-	if (dccp_qpolicy_full(sk)) {
-		rc = -EAGAIN;
-		goto out_discard;
-	}
-
 	if (sk->sk_state == DCCP_CLOSED) {
 		rc = -ENOTCONN;
-		goto out_discard;
-	}
-
-	/* We need to check dccps_mss_cache after socket is locked. */
-	if (len > dp->dccps_mss_cache) {
-		rc = -EMSGSIZE;
 		goto out_discard;
 	}
 

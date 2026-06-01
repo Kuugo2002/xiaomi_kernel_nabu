@@ -30,7 +30,9 @@
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX "kgsl."
 
-#define NO_ACD 1
+static bool noacd;
+module_param(noacd, bool, 0444);
+MODULE_PARM_DESC(noacd, "Disable GPU ACD");
 
 #define GMU_CONTEXT_USER		0
 #define GMU_CONTEXT_KERNEL		1
@@ -852,7 +854,6 @@ static void build_bwtable_cmd_cache(struct gmu_device *gmu)
 				votes->cnoc_votes.cmd_data[i][j];
 }
 
-#ifndef NO_ACD
 static int gmu_acd_probe(struct gmu_device *gmu, struct device_node *node)
 {
 	struct hfi_acd_table_cmd *cmd = &gmu->hfi.acd_tbl_cmd;
@@ -884,7 +885,6 @@ static int gmu_acd_probe(struct gmu_device *gmu, struct device_node *node)
 	return of_property_read_u32_array(acd_node, "qcom,acd-data",
 			cmd->data, cmd->stride * cmd->num_levels);
 }
-#endif
 
 /*
  * gmu_bus_vote_init - initialized RPMh votes needed for bw scaling by GMU.
@@ -1283,7 +1283,6 @@ static void gmu_aop_send_acd_state(struct kgsl_device *device)
 	mailbox->enabled = state;
 }
 
-#ifndef NO_ACD
 static void gmu_aop_mailbox_destroy(struct kgsl_device *device)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
@@ -1333,7 +1332,6 @@ static int gmu_aop_mailbox_init(struct kgsl_device *device,
 
 	return 0;
 }
-#endif
 
 static int gmu_acd_set(struct kgsl_device *device, unsigned int val)
 {
@@ -1454,8 +1452,7 @@ static int gmu_probe(struct kgsl_device *device, struct device_node *node)
 	else
 		gmu->idle_level = GPU_HW_ACTIVE;
 
-#ifndef NO_ACD
-	if (ADRENO_FEATURE(adreno_dev, ADRENO_ACD)) {
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_ACD) && !noacd) {
 		if (!gmu_acd_probe(gmu, node)) {
 			/* Init the AOP mailbox if we have a valid ACD table */
 			ret = gmu_aop_mailbox_init(device, gmu);
@@ -1466,7 +1463,6 @@ static int gmu_probe(struct kgsl_device *device, struct device_node *node)
 			dev_err(&gmu->pdev->dev,
 				"ACD probe failed: missing or invalid table\n");
 	}
-#endif
 
 	if (ADRENO_FEATURE(adreno_dev, ADRENO_LM))
 		set_bit(ADRENO_LM_CTRL, &adreno_dev->pwrctrl_flag);
@@ -1654,7 +1650,7 @@ static int gmu_start(struct kgsl_device *device)
 
 		/* Vote for 300MHz DDR for GMU to init */
 		ret = msm_bus_scale_client_update_request(gmu->pcl,
-				pwr->pwrlevels[pwr->num_pwrlevels - 1].bus_freq);
+				pwr->pwrlevels[pwr->default_pwrlevel].bus_freq);
 		if (ret)
 			dev_err(&gmu->pdev->dev,
 				"Failed to allocate gmu b/w: %d\n", ret);
@@ -1791,9 +1787,7 @@ static void gmu_remove(struct kgsl_device *device)
 
 	gmu_stop(device);
 
-#ifndef NO_ACD
 	gmu_aop_mailbox_destroy(device);
-#endif
 
 	while ((i < MAX_GMU_CLKS) && gmu->clks[i]) {
 		gmu->clks[i] = NULL;

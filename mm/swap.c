@@ -41,7 +41,7 @@
 #include <trace/events/pagemap.h>
 
 /* How many pages do we try to swap or page in/out together? */
-int page_cluster = 0;
+int page_cluster;
 
 static DEFINE_PER_CPU(struct pagevec, lru_add_pvec);
 static DEFINE_PER_CPU(struct pagevec, lru_rotate_pvecs);
@@ -746,8 +746,8 @@ void release_pages(struct page **pages, int nr, bool cold)
 	LIST_HEAD(pages_to_free);
 	struct pglist_data *locked_pgdat = NULL;
 	struct lruvec *lruvec;
-	unsigned long flags;
-	unsigned int lock_batch;
+	unsigned long uninitialized_var(flags);
+	unsigned int uninitialized_var(lock_batch);
 
 	for (i = 0; i < nr; i++) {
 		struct page *page = pages[i];

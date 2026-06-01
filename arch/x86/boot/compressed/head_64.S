@@ -41,7 +41,6 @@
 	.hidden _ebss
 	.hidden _got
 	.hidden _egot
-	.hidden _end
 
 	__HEAD
 	.code32

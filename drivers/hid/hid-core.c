@@ -90,7 +90,7 @@ EXPORT_SYMBOL_GPL(hid_register_report);
  * Register a new field for this report.
  */
 
-static struct hid_field *hid_register_field(struct hid_report *report, unsigned usages)
+static struct hid_field *hid_register_field(struct hid_report *report, unsigned usages, unsigned values)
 {
 	struct hid_field *field;
 
@@ -101,7 +101,7 @@ static struct hid_field *hid_register_field(struct hid_report *report, unsigned 
 
 	field = kzalloc((sizeof(struct hid_field) +
 			 usages * sizeof(struct hid_usage) +
-			 usages * sizeof(unsigned)), GFP_KERNEL);
+			 values * sizeof(unsigned)), GFP_KERNEL);
 	if (!field)
 		return NULL;
 
@@ -245,7 +245,6 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 	unsigned usages;
 	unsigned offset;
 	unsigned i;
-	unsigned int max_buffer_size = HID_MAX_BUFFER_SIZE;
 
 	report = hid_register_report(parser->device, report_type, parser->global.report_id);
 	if (!report) {
@@ -269,11 +268,8 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 	offset = report->size;
 	report->size += parser->global.report_size * parser->global.report_count;
 
-	if (parser->device->ll_driver->max_buffer_size)
-		max_buffer_size = parser->device->ll_driver->max_buffer_size;
-
 	/* Total size check: Allow for possible report index byte */
-	if (report->size > (max_buffer_size - 1) << 3) {
+	if (report->size > (HID_MAX_BUFFER_SIZE - 1) << 3) {
 		hid_err(parser->device, "report is too long\n");
 		return -1;
 	}
@@ -284,7 +280,7 @@ static int hid_add_field(struct hid_parser *parser, unsigned report_type, unsign
 	usages = max_t(unsigned, parser->local.usage_index,
 				 parser->global.report_count);
 
-	field = hid_register_field(report, usages);
+	field = hid_register_field(report, usages, parser->global.report_count);
 	if (!field)
 		return 0;
 
@@ -988,8 +984,8 @@ struct hid_report *hid_validate_values(struct hid_device *hid,
 		 * Validating on id 0 means we should examine the first
 		 * report in the list.
 		 */
-		report = list_first_entry_or_null(
-				&hid->report_enum[type].report_list,
+		report = list_entry(
+				hid->report_enum[type].report_list.next,
 				struct hid_report, list);
 	} else {
 		report = hid->report_enum[type].report_id_hash[id];
@@ -1133,12 +1129,6 @@ EXPORT_SYMBOL_GPL(hid_open_report);
 
 static s32 snto32(__u32 value, unsigned n)
 {
-	if (!value || !n)
-		return 0;
-
-	if (n > 32)
-		n = 32;
-
 	switch (n) {
 	case 8:  return ((__s8)value);
 	case 16: return ((__s16)value);
@@ -1572,7 +1562,6 @@ int hid_report_raw_event(struct hid_device *hid, int type, u8 *data, u32 size,
 	struct hid_report_enum *report_enum = hid->report_enum + type;
 	struct hid_report *report;
 	struct hid_driver *hdrv;
-	int max_buffer_size = HID_MAX_BUFFER_SIZE;
 	unsigned int a;
 	u32 rsize, csize = size;
 	u8 *cdata = data;
@@ -1589,13 +1578,10 @@ int hid_report_raw_event(struct hid_device *hid, int type, u8 *data, u32 size,
 
 	rsize = hid_compute_report_size(report);
 
-	if (hid->ll_driver->max_buffer_size)
-		max_buffer_size = hid->ll_driver->max_buffer_size;
-
-	if (report_enum->numbered && rsize >= max_buffer_size)
-		rsize = max_buffer_size - 1;
-	else if (rsize > max_buffer_size)
-		rsize = max_buffer_size;
+	if (report_enum->numbered && rsize >= HID_MAX_BUFFER_SIZE)
+		rsize = HID_MAX_BUFFER_SIZE - 1;
+	else if (rsize > HID_MAX_BUFFER_SIZE)
+		rsize = HID_MAX_BUFFER_SIZE;
 
 	if (csize < rsize) {
 		dbg_hid("report %d is too short, (%d < %d)\n", report->id,
@@ -1834,9 +1820,6 @@ int hid_connect(struct hid_device *hdev, unsigned int connect_mask)
 		break;
 	case BUS_I2C:
 		bus = "I2C";
-		break;
-	case BUS_VIRTUAL:
-		bus = "VIRTUAL";
 		break;
 	default:
 		bus = "<UNKNOWN>";
@@ -2348,12 +2331,6 @@ static const struct hid_device_id hid_have_special_driver[] = {
 #if IS_ENABLED(CONFIG_HID_PLANTRONICS)
 	{ HID_USB_DEVICE(USB_VENDOR_ID_PLANTRONICS, HID_ANY_ID) },
 #endif
-#if IS_ENABLED(CONFIG_HID_PLAYSTATION)
-	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_SONY,
-	USB_DEVICE_ID_SONY_PS5_CONTROLLER) },
-	{ HID_USB_DEVICE(USB_VENDOR_ID_SONY,
-	USB_DEVICE_ID_SONY_PS5_CONTROLLER) },
-#endif
 #if IS_ENABLED(CONFIG_HID_PRIMAX)
 	{ HID_USB_DEVICE(USB_VENDOR_ID_PRIMAX, USB_DEVICE_ID_PRIMAX_KEYBOARD) },
 #endif
@@ -2490,6 +2467,7 @@ static const struct hid_device_id hid_have_special_driver[] = {
 #if IS_ENABLED(CONFIG_HID_STEAM)
 	{ HID_USB_DEVICE(USB_VENDOR_ID_VALVE, USB_DEVICE_ID_STEAM_CONTROLLER) },
 	{ HID_USB_DEVICE(USB_VENDOR_ID_VALVE, USB_DEVICE_ID_STEAM_CONTROLLER_WIRELESS) },
+	{ HID_BLUETOOTH_DEVICE(USB_VENDOR_ID_VALVE, USB_DEVICE_ID_STEAM_CONTROLLER_BT) },
 #endif
 #if IS_ENABLED(CONFIG_HID_WALTOP)
 	{ HID_USB_DEVICE(USB_VENDOR_ID_WALTOP, USB_DEVICE_ID_WALTOP_SLIM_TABLET_5_8_INCH) },
@@ -2649,8 +2627,12 @@ static int hid_device_remove(struct device *dev)
 {
 	struct hid_device *hdev = to_hid_device(dev);
 	struct hid_driver *hdrv;
+	int ret = 0;
 
-	down(&hdev->driver_input_lock);
+	if (down_interruptible(&hdev->driver_input_lock)) {
+		ret = -EINTR;
+		goto end;
+	}
 	hdev->io_started = false;
 
 	hdrv = hdev->driver;
@@ -2665,8 +2647,8 @@ static int hid_device_remove(struct device *dev)
 
 	if (!hdev->io_started)
 		up(&hdev->driver_input_lock);
-
-	return 0;
+end:
+	return ret;
 }
 
 static ssize_t modalias_show(struct device *dev, struct device_attribute *a,

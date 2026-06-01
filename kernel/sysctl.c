@@ -99,9 +99,6 @@
 #if defined(CONFIG_SYSCTL)
 
 /* External variables not in a header file. */
-#ifdef CONFIG_USB
-extern int deny_new_usb;
-#endif
 extern int suid_dumpable;
 #ifdef CONFIG_EXT4_FS_DYN_BARRIER
 extern int jbd2_bar;
@@ -138,6 +135,7 @@ static unsigned long zero_ul;
 static unsigned long one_ul = 1;
 static unsigned long long_max = LONG_MAX;
 static int one_hundred = 100;
+static int two_hundred = 200;
 static int one_thousand = 1000;
 #ifdef CONFIG_SCHED_WALT
 static int two_million = 2000000;
@@ -257,11 +255,6 @@ static int sysrq_sysctl_handler(struct ctl_table *table, int write,
 #endif
 
 #ifdef CONFIG_BPF_SYSCALL
-
-void __weak unpriv_ebpf_notify(int new_state)
-{
-}
-
 static int bpf_unpriv_handler(struct ctl_table *table, int write,
                              void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -279,9 +272,6 @@ static int bpf_unpriv_handler(struct ctl_table *table, int write,
 			return -EPERM;
 		*(int *)table->data = unpriv_enable;
 	}
-
-	unpriv_ebpf_notify(unpriv_enable);
-
 	return ret;
 }
 #endif
@@ -348,7 +338,6 @@ static int max_extfrag_threshold = 1000;
 #endif
 
 static struct ctl_table kern_table[] = {
-#if 0
 	{
 		.procname	= "sched_child_runs_first",
 		.data		= &sysctl_sched_child_runs_first,
@@ -356,7 +345,6 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
-#endif
 #if defined(CONFIG_PREEMPT_TRACER) || defined(CONFIG_DEBUG_PREEMPT)
 	{
 		.procname       = "preemptoff_tracing_threshold_ns",
@@ -462,7 +450,6 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &zero,
 		.extra2		= &one_thousand,
 	},
-#if 0
 	{
 		.procname	= "sched_min_task_util_for_colocation",
 		.data		= &sysctl_sched_min_task_util_for_colocation,
@@ -472,7 +459,6 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &zero,
 		.extra2		= &one_thousand,
 	},
-#endif
 	{
 		.procname	= "sched_little_cluster_coloc_fmin_khz",
 		.data		= &sysctl_sched_little_cluster_coloc_fmin_khz,
@@ -497,17 +483,7 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= sched_updown_migrate_handler,
 	},
-	{
-		.procname       = "sched_energy_aware",
-		.data           = &sysctl_sched_energy_aware,
-		.maxlen         = sizeof(unsigned int),
-		.mode           = 0644,
-		.proc_handler   = proc_dointvec_minmax,
-		.extra1         = &zero,
-		.extra2         = &one,
-	},
 #ifdef CONFIG_SCHED_DEBUG
-#if 0
 	{
 		.procname	= "sched_min_granularity_ns",
 		.data		= &sysctl_sched_min_granularity,
@@ -526,7 +502,6 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &min_sched_granularity_ns,
 		.extra2		= &max_sched_granularity_ns,
 	},
-#endif
 	{
 		.procname	= "sched_sync_hint_enable",
 		.data		= &sysctl_sched_sync_hint_enable,
@@ -541,7 +516,6 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
-#if 0
 	{
 		.procname	= "sched_wakeup_granularity_ns",
 		.data		= &sysctl_sched_wakeup_granularity,
@@ -551,9 +525,7 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &min_wakeup_granularity_ns,
 		.extra2		= &max_wakeup_granularity_ns,
 	},
-#endif
 #ifdef CONFIG_SMP
-#if 0
 	{
 		.procname	= "sched_tunable_scaling",
 		.data		= &sysctl_sched_tunable_scaling,
@@ -577,7 +549,6 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
-#endif
 	{
 		.procname	= "sched_time_avg_ms",
 		.data		= &sysctl_sched_time_avg,
@@ -587,7 +558,6 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &one,
 	},
 #ifdef CONFIG_SCHEDSTATS
-#if 0
 	{
 		.procname	= "sched_schedstats",
 		.data		= NULL,
@@ -597,7 +567,6 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &zero,
 		.extra2		= &one,
 	},
-#endif
 #endif /* CONFIG_SCHEDSTATS */
 #endif /* CONFIG_SMP */
 #ifdef CONFIG_NUMA_BALANCING
@@ -663,7 +632,6 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= sched_rr_handler,
 	},
 #ifdef CONFIG_SCHED_AUTOGROUP
-#if 0
 	{
 		.procname	= "sched_autogroup_enabled",
 		.data		= &sysctl_sched_autogroup_enabled,
@@ -673,7 +641,6 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &zero,
 		.extra2		= &one,
 	},
-#endif
 #endif
 #ifdef CONFIG_CFS_BANDWIDTH
 	{
@@ -1091,17 +1058,6 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &two,
 	},
 #endif
-#ifdef CONFIG_USB
-	{
-		.procname	= "deny_new_usb",
-		.data		= &deny_new_usb,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax_sysadmin,
-		.extra1		= &zero,
-		.extra2		= &one,
-	},
-#endif
 	{
 		.procname	= "ngroups_max",
 		.data		= &ngroups_max,
@@ -1403,7 +1359,6 @@ static struct ctl_table kern_table[] = {
 		.proc_handler	= perf_proc_update_handler,
 		.extra1		= &one,
 	},
-#if 0
 	{
 		.procname	= "perf_cpu_time_max_percent",
 		.data		= &sysctl_perf_cpu_time_max_percent,
@@ -1413,7 +1368,6 @@ static struct ctl_table kern_table[] = {
 		.extra1		= &zero,
 		.extra2		= &one_hundred,
 	},
-#endif
 	{
 		.procname	= "perf_event_max_stack",
 		.data		= &sysctl_perf_event_max_stack,
@@ -1549,7 +1503,6 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= overcommit_kbytes_handler,
 	},
-#if 0
 	{
 		.procname	= "page-cluster", 
 		.data		= &page_cluster,
@@ -1567,7 +1520,6 @@ static struct ctl_table vm_table[] = {
 		.extra1		= &zero,
 		.extra2		= &one_hundred,
 	},
-#endif
 	{
 		.procname	= "dirty_background_bytes",
 		.data		= &dirty_background_bytes,
@@ -1576,7 +1528,6 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= dirty_background_bytes_handler,
 		.extra1		= &one_ul,
 	},
-#if 0
 	{
 		.procname	= "dirty_ratio",
 		.data		= &vm_dirty_ratio,
@@ -1586,7 +1537,6 @@ static struct ctl_table vm_table[] = {
 		.extra1		= &zero,
 		.extra2		= &one_hundred,
 	},
-#endif
 	{
 		.procname	= "dirty_bytes",
 		.data		= &vm_dirty_bytes,
@@ -1595,7 +1545,6 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= dirty_bytes_handler,
 		.extra1		= &dirty_bytes_min,
 	},
-#if 0
 	{
 		.procname	= "dirty_writeback_centisecs",
 		.data		= &dirty_writeback_interval,
@@ -1611,7 +1560,6 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &zero,
 	},
-#endif
 	{
 		.procname	= "dirtytime_expire_seconds",
 		.data		= &dirtytime_expire_interval,
@@ -1625,7 +1573,6 @@ static struct ctl_table vm_table[] = {
 		.mode           = 0444 /* read-only */,
 		.proc_handler   = pdflush_proc_obsolete,
 	},
-#if 0
 	{
 		.procname	= "swappiness",
 		.data		= &vm_swappiness,
@@ -1633,9 +1580,8 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= &zero,
-		.extra2		= &one_hundred,
+		.extra2		= &two_hundred,
 	},
-#endif
 	{
 		.procname       = "want_old_faultaround_pte",
 		.data           = &want_old_faultaround_pte,
@@ -1795,7 +1741,6 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= proc_dointvec,
 		.extra1		= &zero,
 	},
-#if 0
 	{
 		.procname	= "vfs_cache_pressure",
 		.data		= &sysctl_vfs_cache_pressure,
@@ -1804,7 +1749,6 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= proc_dointvec,
 		.extra1		= &zero,
 	},
-#endif
 #ifdef HAVE_ARCH_PICK_MMAP_LAYOUT
 	{
 		.procname	= "legacy_va_layout",
@@ -1844,7 +1788,6 @@ static struct ctl_table vm_table[] = {
 	},
 #endif
 #ifdef CONFIG_SMP
-#if 0
 	{
 		.procname	= "stat_interval",
 		.data		= &sysctl_stat_interval,
@@ -1852,7 +1795,6 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_jiffies,
 	},
-#endif
 	{
 		.procname	= "stat_refresh",
 		.data		= NULL,
@@ -2372,14 +2314,13 @@ int proc_dostring(struct ctl_table *table, int write,
 			       (char __user *)buffer, lenp, ppos);
 }
 
-static void proc_skip_spaces(char **buf, size_t *size)
+static size_t proc_skip_spaces(char **buf)
 {
-	while (*size) {
-		if (!isspace(**buf))
-			break;
-		(*size)--;
-		(*buf)++;
-	}
+	size_t ret;
+	char *tmp = skip_spaces(*buf);
+	ret = tmp - *buf;
+	*buf = tmp;
+	return ret;
 }
 
 static void proc_skip_char(char **buf, size_t *size, const char v)
@@ -2413,12 +2354,13 @@ static int proc_get_long(char **buf, size_t *size,
 			  unsigned long *val, bool *neg,
 			  const char *perm_tr, unsigned perm_tr_len, char *tr)
 {
+	int len;
 	char *p, tmp[TMPBUFLEN];
-	ssize_t len = *size;
 
-	if (len <= 0)
+	if (!*size)
 		return -EINVAL;
 
+	len = *size;
 	if (len > TMPBUFLEN - 1)
 		len = TMPBUFLEN - 1;
 
@@ -2580,7 +2522,7 @@ static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
 		bool neg;
 
 		if (write) {
-			proc_skip_spaces(&p, &left);
+			left -= proc_skip_spaces(&p);
 
 			if (!left)
 				break;
@@ -2611,7 +2553,7 @@ static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
 	if (!write && !first && left && !err)
 		err = proc_put_char(&buffer, &left, '\n');
 	if (write && !err && left)
-		proc_skip_spaces(&p, &left);
+		left -= proc_skip_spaces(&p);
 	if (write) {
 		kfree(kbuf);
 		if (first)
@@ -2660,7 +2602,7 @@ static int do_proc_douintvec_w(unsigned int *tbl_data,
 	if (IS_ERR(kbuf))
 		return -EINVAL;
 
-	proc_skip_spaces(&p, &left);
+	left -= proc_skip_spaces(&p);
 	if (!left) {
 		err = -EINVAL;
 		goto out_free;
@@ -2680,7 +2622,7 @@ static int do_proc_douintvec_w(unsigned int *tbl_data,
 	}
 
 	if (!err && left)
-		proc_skip_spaces(&p, &left);
+		left -= proc_skip_spaces(&p);
 
 out_free:
 	kfree(kbuf);
@@ -3055,7 +2997,7 @@ static int __do_proc_doulongvec_minmax(void *data, struct ctl_table *table, int 
 		if (write) {
 			bool neg;
 
-			proc_skip_spaces(&p, &left);
+			left -= proc_skip_spaces(&p);
 			if (!left)
 				break;
 
@@ -3088,7 +3030,7 @@ static int __do_proc_doulongvec_minmax(void *data, struct ctl_table *table, int 
 	if (!write && !first && left && !err)
 		err = proc_put_char(&buffer, &left, '\n');
 	if (write && !err)
-		proc_skip_spaces(&p, &left);
+		left -= proc_skip_spaces(&p);
 	if (write) {
 		kfree(kbuf);
 		if (first)

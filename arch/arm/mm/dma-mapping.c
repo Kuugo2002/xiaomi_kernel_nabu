@@ -1992,10 +1992,7 @@ int arm_iommu_map_sg(struct device *dev, struct scatterlist *sg,
 
 	for_each_sg(sg, s, nents, i) {
 		s->dma_address = iova + current_offset;
-		if (i == 0)
-			s->dma_length = total_length;
-		else
-			s->dma_length = 0;
+		s->dma_length = total_length - current_offset;
 		current_offset += s->length;
 	}
 

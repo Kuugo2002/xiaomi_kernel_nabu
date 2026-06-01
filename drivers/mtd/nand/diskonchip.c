@@ -1605,10 +1605,13 @@ static int __init doc_probe(unsigned long physadr)
 		numchips = doc2001_init(mtd);
 
 	if ((ret = nand_scan(mtd, numchips)) || (ret = doc->late_init(mtd))) {
-		/* DBB note: i believe nand_cleanup is necessary here, as
+		/* DBB note: i believe nand_release is necessary here, as
 		   buffers may have been allocated in nand_base.  Check with
 		   Thomas. FIX ME! */
-		nand_cleanup(nand);
+		/* nand_release will call mtd_device_unregister, but we
+		   haven't yet added it.  This is handled without incident by
+		   mtd_device_unregister, as far as I can tell. */
+		nand_release(mtd);
 		kfree(nand);
 		goto fail;
 	}
@@ -1641,7 +1644,7 @@ static void release_nanddoc(void)
 		doc = nand_get_controller_data(nand);
 
 		nextmtd = doc->nextdoc;
-		nand_release(nand);
+		nand_release(mtd);
 		iounmap(doc->virtadr);
 		release_mem_region(doc->physadr, DOC_IOREMAP_LEN);
 		kfree(nand);

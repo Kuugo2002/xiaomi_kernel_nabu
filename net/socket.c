@@ -508,7 +508,7 @@ static struct socket *sockfd_lookup_light(int fd, int *err, int *fput_needed)
 	if (f.file) {
 		sock = sock_from_file(f.file, err);
 		if (likely(sock)) {
-			*fput_needed = f.flags & FDPUT_FPUT;
+			*fput_needed = f.flags;
 			return sock;
 		}
 		fdput(f);
@@ -1505,10 +1505,9 @@ SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 						      (struct sockaddr *)
 						      &address, addrlen);
 		}
+		fput_light(sock->file, fput_needed);
 		if (!err)
 			sockev_notify(SOCKEV_BIND, sock);
-
-		fput_light(sock->file, fput_needed);
 	}
 	return err;
 }
@@ -1527,7 +1526,7 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock) {
-		somaxconn = READ_ONCE(sock_net(sock->sk)->core.sysctl_somaxconn);
+		somaxconn = sock_net(sock->sk)->core.sysctl_somaxconn;
 		if ((unsigned int)backlog > somaxconn)
 			backlog = somaxconn;
 
@@ -1535,10 +1534,9 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 		if (!err)
 			err = sock->ops->listen(sock, backlog);
 
+		fput_light(sock->file, fput_needed);
 		if (!err)
 			sockev_notify(SOCKEV_LISTEN, sock);
-
-		fput_light(sock->file, fput_needed);
 	}
 	return err;
 }
@@ -2410,7 +2408,7 @@ int __sys_recvmmsg(int fd, struct mmsghdr __user *mmsg, unsigned int vlen,
 		 * error to return on the next call or if the
 		 * app asks about it using getsockopt(SO_ERROR).
 		 */
-		WRITE_ONCE(sock->sk->sk_err, -err);
+		sock->sk->sk_err = -err;
 	}
 out_put:
 	fput_light(sock->file, fput_needed);

@@ -2306,7 +2306,7 @@ static int omap_nand_remove(struct platform_device *pdev)
 	}
 	if (info->dma)
 		dma_release_channel(info->dma);
-	nand_release(nand_chip);
+	nand_release(mtd);
 	return 0;
 }
 

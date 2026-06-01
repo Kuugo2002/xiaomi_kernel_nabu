@@ -1,5 +1,4 @@
 /* Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -21,7 +20,6 @@
 #include <linux/io.h>
 #include <soc/qcom/scm.h>
 #include <soc/qcom/boot_stats.h>
-#include <linux/syscalls.h>
 
 #include <linux/msm-bus-board.h>
 #include <linux/msm-bus.h>
@@ -59,12 +57,6 @@ static bool swfdetect;
 module_param(swfdetect, bool, 0444);
 MODULE_PARM_DESC(swfdetect, "Enable soft fault detection");
 
-struct adreno_kgsl_einfo {
-	struct kgsl_device *dev;
-};
-
-static struct adreno_kgsl_einfo adreno_info;
-
 #define DRIVER_VERSION_MAJOR   3
 #define DRIVER_VERSION_MINOR   1
 
@@ -76,7 +68,7 @@ static unsigned int counter_delta(struct kgsl_device *device,
 
 static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 	.bus = {
-		.max = 600,
+		.max = 350,
 	},
 	.device_id = KGSL_DEVICE_3D0,
 };
@@ -1006,6 +998,7 @@ static void adreno_of_get_initial_pwrlevel(struct adreno_device *adreno_dev,
 		init_level = 1;
 
 	pwr->active_pwrlevel = init_level;
+	pwr->default_pwrlevel = init_level;
 }
 
 static int adreno_of_get_legacy_pwrlevels(struct adreno_device *adreno_dev,
@@ -1166,7 +1159,7 @@ static int adreno_of_get_power(struct adreno_device *adreno_dev,
 		device->pwrctrl.pm_qos_wakeup_latency = 101;
 
 	if (of_property_read_u32(node, "qcom,idle-timeout", &timeout))
-		timeout = 64;
+		timeout = 80;
 
 	device->pwrctrl.interval_timeout = msecs_to_jiffies(timeout);
 
@@ -1452,16 +1445,12 @@ static int adreno_probe(struct platform_device *pdev)
 	adreno_debugfs_init(adreno_dev);
 	adreno_profile_init(adreno_dev);
 
-	adreno_dev->perfcounter = false;
-
 	adreno_sysfs_init(adreno_dev);
 
 	kgsl_pwrscale_init(&pdev->dev, CONFIG_QCOM_ADRENO_DEFAULT_GOVERNOR);
 
-	#ifdef CONFIG_CORESIGHT
 	/* Initialize coresight for the target */
 	adreno_coresight_init(adreno_dev);
-	#endif
 
 	/* Get the system cache slice descriptor for GPU */
 	adreno_dev->gpu_llc_slice = adreno_llc_getd(&pdev->dev, "gpu");
@@ -1552,9 +1541,7 @@ static int adreno_remove(struct platform_device *pdev)
 #endif
 	adreno_sysfs_close(adreno_dev);
 
-	#ifdef CONFIG_CORESIGHT
 	adreno_coresight_remove(adreno_dev);
-	#endif
 	adreno_profile_close(adreno_dev);
 
 	/* Release the system cache slice descriptor */
@@ -1689,106 +1676,11 @@ int adreno_clear_pending_transactions(struct kgsl_device *device)
 	return ret;
 }
 
-static int validate_adreno_freq(unsigned length, unsigned long freq, struct kgsl_pwrlevel *pwrlevels_info)
-{
-	int i = 0;
-
-	for (; i < length; ++i) {
-		if (freq == pwrlevels_info[i].gpu_freq)
-			return 0;
-	}
-
-	return -EINVAL;
-}
-
-/**
- * adreno_freq_entry - A system call to retrieve or modify the GPU frequency for Adreno GPUs.
- * @target_freq: The new frequency to set, if applicable.
- * @user_freq_list: The user space address to save and return the list of available frequencies.
- * @operation_flag:
- *      0 -> Retrieve information only.
- *      > 0 -> Change the maximum frequency using the value in @freq.
- *      < 0 -> Change the minimum frequency using the value in @freq.
- *
- * This function allows user space programs to interact with the GPU frequency settings
- * of Adreno GPUs without requiring root privileges. It can either return the list of
- * available GPU frequencies or change the maximum or minimum frequency based on the
- * provided parameters.
- *
- * If @target_freq is 0, the function will return the current maximum frequency if @operation_flag
- * is greater than 0, or the current minimum frequency if @operation_flag is less than 0.
- *
- * Return: 0 on success, or a negative error code on failure.
- */
-static long int adreno_freq_entry(unsigned long target_freq, unsigned int *user_freq_list, int operation_flag)
-{
-
-	int i, ret;
-	unsigned int list[KGSL_MAX_PWRLEVELS] = {0};
-	struct kgsl_device *dev = adreno_info.dev;
-	int level;
-	struct kgsl_pwrctrl *pwr = &dev->pwrctrl;
-	struct kgsl_pwrlevel *pwrlevels_info = pwr->pwrlevels;
-
-    /**
-     * Verify that freq_list is not NULL when the flag indicates that information should be retrieved.
-     * If the flag is 0 and freq_list is NULL, return immediately.
-     */
-	if (operation_flag == 0 && user_freq_list == NULL)
-		return 0;
-
-	// Retrieve and return GPU frequency information if flag is 0.
-    if (!operation_flag)
-	{
-		for (i = 0; i < pwr->num_pwrlevels && i < KGSL_MAX_PWRLEVELS; i++)
-			list[i] = pwrlevels_info[i].gpu_freq;
-
-		return copy_to_user(user_freq_list, &list, sizeof(unsigned int) * KGSL_MAX_PWRLEVELS) ? -EFAULT : 0;
-	}
-
-	// If freq is 0, return the current maximum or minimum frequency based on the flag.
-    if (target_freq == 0)
-		return operation_flag > 0 ? kgsl_pwrctrl_max_clock_get(dev) : pwr->pwrlevels[pwr->min_pwrlevel].gpu_freq;
-
-	// Validate the requested frequency before proceeding with the change.
-    ret = validate_adreno_freq(pwr->num_pwrlevels, target_freq, pwrlevels_info);
-	if (ret < 0)
-		return ret;
-
-	if (operation_flag < 0)
-	{
-		// Determine the minimum frequency level that is close to the requested frequency.
-        for (level = -1, i = pwr->num_pwrlevels - 2; i >= 0; i--) {
-			if (abs(pwr->pwrlevels[i].gpu_freq - target_freq) < 5000000) {
-				level = i;
-				break;
-			}
-		}
-
-		// Set the minimum power level if a valid level is found.
-		if (level != -1)
-			kgsl_pwrctrl_min_pwrlevel_set(dev, level);
-	}
-	else {
-		// Set the maximum GPU clock frequency to the requested value.
-		kgsl_pwrctrl_max_clock_set(dev, target_freq);
-	}
-
-	return 0;
-}
-
-SYSCALL_DEFINE3(adreno_freq, unsigned long, target_freq, unsigned int *, user_freq_list, int, flag)
-{
-	return adreno_freq_entry(target_freq, user_freq_list, flag);
-}
-
 static int adreno_init(struct kgsl_device *device)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	int ret;
-
-	adreno_info.dev = &adreno_dev->dev;
 
 	if (!adreno_is_a3xx(adreno_dev))
 		kgsl_sharedmem_set(device, &device->scratch, 0, 0,
@@ -2274,10 +2166,8 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	 */
 	adreno_llc_setup(device);
 
-	#ifdef CONFIG_CORESIGHT
 	/* Re-initialize the coresight registers if applicable */
 	adreno_coresight_start(adreno_dev);
-	#endif
 
 	adreno_irqctrl(adreno_dev, 1);
 
@@ -2419,10 +2309,8 @@ static int adreno_stop(struct kgsl_device *device)
 	adreno_llc_deactivate_slice(adreno_dev->gpu_llc_slice);
 	adreno_llc_deactivate_slice(adreno_dev->gpuhtw_llc_slice);
 
-	#ifdef CONFIG_CORESIGHT
 	/* Save active coresight registers if applicable */
 	adreno_coresight_stop(adreno_dev);
-	#endif
 
 	/* Save physical performance counter values before GPU power down*/
 	adreno_perfcounter_save(adreno_dev);
@@ -2532,14 +2420,6 @@ int adreno_reset(struct kgsl_device *device, int fault)
 		}
 	}
 	if (ret) {
-		unsigned long flags = device->pwrctrl.ctrl_flags;
-
-		/*
-		 * Clear ctrl_flags to ensure clocks and regulators are
-		 * turned off
-		 */
-		device->pwrctrl.ctrl_flags = 0;
-
 		/* If soft reset failed/skipped, then pull the power */
 		kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 		/* since device is officially off now clear start bit */
@@ -2557,8 +2437,6 @@ int adreno_reset(struct kgsl_device *device, int fault)
 					break;
 			}
 		}
-
-		device->pwrctrl.ctrl_flags = flags;
 	}
 	if (ret)
 		return ret;
@@ -3273,10 +3151,8 @@ int adreno_soft_reset(struct kgsl_device *device)
 	/* Reinitialize the GPU */
 	gpudev->start(adreno_dev);
 
-	#ifdef CONFIG_CORESIGHT
 	/* Re-initialize the coresight registers if applicable */
 	adreno_coresight_start(adreno_dev);
-	#endif
 
 	/* Enable IRQ */
 	adreno_irqctrl(adreno_dev, 1);

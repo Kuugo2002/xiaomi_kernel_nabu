@@ -168,6 +168,7 @@ config DEVFREQ_GOV_QCOM_ADRENO_TZ
 
 config DEVFREQ_GOV_QCOM_GPUBW_MON
 	tristate "GPU BW voting governor"
+	depends on DEVFREQ_GOV_QCOM_ADRENO_TZ
 	help
 	  This governor works together with Adreno Trustzone governor,
 	  and select bus frequency votes using an "on-demand" alorithm.

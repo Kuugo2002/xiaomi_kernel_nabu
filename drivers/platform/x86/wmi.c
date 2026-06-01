@@ -307,14 +307,7 @@ static acpi_status __query_block(struct wmi_block *wblock, u8 instance,
 	 * the WQxx method failed - we should disable collection anyway.
 	 */
 	if ((block->flags & ACPI_WMI_EXPENSIVE) && ACPI_SUCCESS(wc_status)) {
-		/*
-		 * Ignore whether this WCxx call succeeds or not since
-		 * the previously executed WQxx method call might have
-		 * succeeded, and returning the failing status code
-		 * of this call would throw away the result of the WQxx
-		 * call, potentially leaking memory.
-		 */
-		acpi_execute_simple_method(handle, wc_method, 0);
+		status = acpi_execute_simple_method(handle, wc_method, 0);
 	}
 
 	return status;
@@ -953,8 +946,8 @@ static int parse_wdg(struct device *wmi_bus_dev, struct acpi_device *device)
 	struct wmi_block *wblock, *next;
 	union acpi_object *obj;
 	acpi_status status;
+	int retval = 0;
 	u32 i, total;
-	int retval;
 
 	status = acpi_evaluate_object(device->handle, "_WDG", NULL, &out);
 	if (ACPI_FAILURE(status))
@@ -965,8 +958,8 @@ static int parse_wdg(struct device *wmi_bus_dev, struct acpi_device *device)
 		return -ENXIO;
 
 	if (obj->type != ACPI_TYPE_BUFFER) {
-		kfree(obj);
-		return -ENXIO;
+		retval = -ENXIO;
+		goto out_free_pointer;
 	}
 
 	gblock = (const struct guid_block *)obj->buffer.pointer;
@@ -987,8 +980,8 @@ static int parse_wdg(struct device *wmi_bus_dev, struct acpi_device *device)
 
 		wblock = kzalloc(sizeof(struct wmi_block), GFP_KERNEL);
 		if (!wblock) {
-			dev_err(wmi_bus_dev, "Failed to allocate %pUL\n", &gblock[i].guid);
-			continue;
+			retval = -ENOMEM;
+			break;
 		}
 
 		wblock->acpi_device = device;
@@ -1027,9 +1020,9 @@ static int parse_wdg(struct device *wmi_bus_dev, struct acpi_device *device)
 		}
 	}
 
-	kfree(obj);
-
-	return 0;
+out_free_pointer:
+	kfree(out.pointer);
+	return retval;
 }
 
 /*

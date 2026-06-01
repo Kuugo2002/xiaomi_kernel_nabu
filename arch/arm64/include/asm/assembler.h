@@ -118,13 +118,6 @@
 	.endm
 
 /*
- * Clear Branch History instruction
- */
-	.macro clearbhb
-	hint	#22
-	.endm
-
-/*
  * Sanitise a 64-bit bounded index wrt speculation, returning zero if out
  * of bounds.
  */
@@ -458,7 +451,6 @@ alternative_endif
 	.endm
 
 /*
- * Deprecated! Use SYM_FUNC_{START,START_WEAK,END}_PI instead.
  * Annotate a function as position independent, i.e., safe to be called before
  * the kernel virtual mapping is activated.
  */
@@ -578,31 +570,4 @@ alternative_endif
 .Ldone\@:
 	.endm
 
-	.macro __mitigate_spectre_bhb_loop      tmp
-#ifdef CONFIG_MITIGATE_SPECTRE_BRANCH_HISTORY
-alternative_cb  spectre_bhb_patch_loop_iter
-	mov	\tmp, #32		// Patched to correct the immediate
-alternative_cb_end
-.Lspectre_bhb_loop\@:
-	b	. + 4
-	subs	\tmp, \tmp, #1
-	b.ne	.Lspectre_bhb_loop\@
-	dsb	nsh
-	isb
-#endif /* CONFIG_MITIGATE_SPECTRE_BRANCH_HISTORY */
-	.endm
-
-	/* Save/restores x0-x3 to the stack */
-	.macro __mitigate_spectre_bhb_fw
-#ifdef CONFIG_MITIGATE_SPECTRE_BRANCH_HISTORY
-	stp	x0, x1, [sp, #-16]!
-	stp	x2, x3, [sp, #-16]!
-	mov	w0, #ARM_SMCCC_ARCH_WORKAROUND_3
-alternative_cb	arm64_update_smccc_conduit
-	nop					// Patched to SMC/HVC #0
-alternative_cb_end
-	ldp	x2, x3, [sp], #16
-	ldp	x0, x1, [sp], #16
-#endif /* CONFIG_MITIGATE_SPECTRE_BRANCH_HISTORY */
-	.endm
 #endif	/* __ASM_ASSEMBLER_H */

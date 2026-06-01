@@ -1450,9 +1450,6 @@ static int smb5_usb_set_prop(struct power_supply *psy,
 	struct smb_charger *chg = &chip->chg;
 	int icl, rc = 0;
 
-	if (psp == 67)
-		return 0;
-
 	switch (psp) {
 	case POWER_SUPPLY_PROP_PD_CURRENT_MAX:
 		rc = smblib_set_prop_pd_current_max(chg, val);
@@ -1622,9 +1619,6 @@ static int smb5_usb_port_get_prop(struct power_supply *psy,
 	struct smb_charger *chg = &chip->chg;
 	int rc = 0;
 
-	if (psp == 67)
-		return 0;
-
 	switch (psp) {
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_USB;
@@ -1671,9 +1665,6 @@ static int smb5_usb_port_set_prop(struct power_supply *psy,
 		const union power_supply_propval *val)
 {
 	int rc = 0;
-
-	if (psp == 67)
-		return 0;
 
 	switch (psp) {
 	default:
@@ -1823,9 +1814,6 @@ static int smb5_usb_main_set_prop(struct power_supply *psy,
 	enum power_supply_type real_chg_type = chg->real_charger_type;
 	int parallel_output_mode = 0;
 	int rc = 0, offset_ua = 0;
-
-	if (psp == 67)
-		return 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
@@ -2767,9 +2755,6 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 {
 	struct smb_charger *chg = power_supply_get_drvdata(psy);
 	int rc = 0;
-
-	if (psp == 67)
-		return 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:

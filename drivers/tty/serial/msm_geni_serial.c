@@ -118,7 +118,7 @@
 #define UART_CORE2X_VOTE	(5000)
 #define UART_CONSOLE_CORE2X_VOTE (960)
 
-#define WAKEBYTE_TIMEOUT_MSEC	(100)
+#define WAKEBYTE_TIMEOUT_MSEC	(2000)
 #define WAIT_XFER_MAX_ITER	(2)
 #define WAIT_XFER_MAX_TIMEOUT_US	(10000)
 #define WAIT_XFER_MIN_TIMEOUT_US	(9000)
@@ -1445,13 +1445,13 @@ static void start_rx_sequencer(struct uart_port *uport)
 		msm_geni_serial_stop_rx(uport);
 	}
 
+	/* Start RX with the RFR_OPEN to keep RFR in always ready state */
+	msm_geni_serial_enable_interrupts(uport);
+	geni_setup_s_cmd(uport->membase, UART_START_READ, geni_se_param);
+
 	if (port->xfer_mode == SE_DMA)
 		geni_se_rx_dma_start(uport->membase, DMA_RX_BUF_SIZE,
 							&port->rx_dma);
-
-	/* Start RX with the RFR_OPEN to keep RFR in always ready state */
-	geni_setup_s_cmd(uport->membase, UART_START_READ, geni_se_param);
-	msm_geni_serial_enable_interrupts(uport);
 
 	/* Ensure that the above writes go through */
 	mb();
@@ -2265,6 +2265,10 @@ static int msm_geni_serial_port_setup(struct uart_port *uport)
 						SE_GENI_RX_PACKING_CFG0);
 		geni_write_reg_nolog(cfg1, uport->membase,
 						SE_GENI_RX_PACKING_CFG1);
+		msm_port->handle_rx = handle_rx_hs;
+		msm_port->rx_fifo = devm_kzalloc(uport->dev,
+				sizeof(msm_port->rx_fifo_depth * sizeof(u32)),
+								GFP_KERNEL);
 		if (!msm_port->rx_fifo) {
 			ret = -ENOMEM;
 			goto exit_portsetup;
@@ -2786,12 +2790,6 @@ static void msm_geni_serial_cancel_rx(struct uart_port *uport)
 	unsigned int irq_status;
 	u32 rx_fifo_status;
 	u32 rx_fifo_wc;
-	u32 geni_status;
-
-	geni_status = geni_read_reg_nolog(uport->membase, SE_GENI_STATUS);
-	/* Possible thats stop rx is already done from UEFI end */
-	if (!(geni_status & S_GENI_CMD_ACTIVE))
-		return;
 
 	geni_cancel_s_cmd(uport->membase);
 	/* Ensure this goes through before polling. */
@@ -2987,7 +2985,6 @@ static void console_unregister(struct uart_driver *drv)
 }
 #endif /* defined(CONFIG_SERIAL_CORE_CONSOLE) || defined(CONFIG_CONSOLE_POLL) */
 
-#ifdef CONFIG_IPC_LOGGING
 static void msm_geni_serial_debug_init(struct uart_port *uport, bool console)
 {
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
@@ -3046,7 +3043,6 @@ static void msm_geni_serial_debug_init(struct uart_port *uport, bool console)
 		}
 	}
 }
-#endif
 
 static void msm_geni_serial_cons_pm(struct uart_port *uport,
 		unsigned int new_state, unsigned int old_state)
@@ -3417,10 +3413,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		dev_port->rx_fifo = devm_kzalloc(uport->dev, sizeof(u32),
 								GFP_KERNEL);
 	} else {
-		dev_port->handle_rx = handle_rx_hs;
-		dev_port->rx_fifo = devm_kzalloc(uport->dev,
-				sizeof(dev_port->rx_fifo_depth * sizeof(u32)),
-								GFP_KERNEL);
 		if (dev_port->pm_auto_suspend_disable) {
 			pm_runtime_set_active(&pdev->dev);
 			pm_runtime_forbid(&pdev->dev);
@@ -3448,9 +3440,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	device_create_file(uport->dev, &dev_attr_loopback);
 	device_create_file(uport->dev, &dev_attr_xfer_mode);
 	device_create_file(uport->dev, &dev_attr_ver_info);
-#ifdef CONFIG_IPC_LOGGING
 	msm_geni_serial_debug_init(uport, is_console);
-#endif
 	dev_port->port_setup = false;
 	ret = msm_geni_serial_get_ver_info(uport);
 	if (ret)

@@ -13,7 +13,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/sched/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/blkpg.h>
 #include <linux/bio.h>
@@ -223,6 +222,7 @@ out_free_io_cache:
 
 static void local_exit(void)
 {
+	flush_scheduled_work();
 	destroy_workqueue(deferred_remove_workqueue);
 
 	kmem_cache_destroy(_rq_cache);
@@ -474,7 +474,7 @@ static int dm_blk_ioctl(struct block_device *bdev, fmode_t mode,
 		 * subset of the parent bdev; require extra privileges.
 		 */
 		if (!capable(CAP_SYS_RAWIO)) {
-			DMDEBUG_LIMIT(
+			DMWARN_LIMIT(
 	"%s: sending ioctl %x to DM device without required privilege.",
 				current->comm, cmd);
 			r = -ENOIOCTLCMD;
@@ -530,19 +530,20 @@ static void start_io_acct(struct dm_io *io)
 				    false, 0, &io->stats_aux);
 }
 
-static void end_io_acct(struct mapped_device *md, struct bio *bio,
-			unsigned long start_time, struct dm_stats_aux *stats_aux)
+static void end_io_acct(struct dm_io *io)
 {
-	unsigned long duration = jiffies - start_time;
+	struct mapped_device *md = io->md;
+	struct bio *bio = io->bio;
+	unsigned long duration = jiffies - io->start_time;
 	int pending;
 	int rw = bio_data_dir(bio);
 
-	generic_end_io_acct(md->queue, rw, &dm_disk(md)->part0, start_time);
+	generic_end_io_acct(md->queue, rw, &dm_disk(md)->part0, io->start_time);
 
 	if (unlikely(dm_stats_used(&md->stats)))
 		dm_stats_account_io(&md->stats, bio_data_dir(bio),
 				    bio->bi_iter.bi_sector, bio_sectors(bio),
-				    true, duration, stats_aux);
+				    true, duration, &io->stats_aux);
 
 	/*
 	 * After this is decremented the bio must not be touched if it is
@@ -776,8 +777,6 @@ static void dec_pending(struct dm_io *io, blk_status_t error)
 	blk_status_t io_error;
 	struct bio *bio;
 	struct mapped_device *md = io->md;
-	unsigned long start_time = 0;
-	struct dm_stats_aux stats_aux;
 
 	/* Push-back supersedes any I/O errors */
 	if (unlikely(error)) {
@@ -804,10 +803,8 @@ static void dec_pending(struct dm_io *io, blk_status_t error)
 
 		io_error = io->status;
 		bio = io->bio;
-		start_time = io->start_time;
-		stats_aux = io->stats_aux;
+		end_io_acct(io);
 		free_io(md, io);
-		end_io_acct(md, bio, start_time, &stats_aux);
 
 		if (io_error == BLK_STS_DM_REQUEUE)
 			return;
@@ -1209,15 +1206,13 @@ static void __map_bio(struct dm_target_io *tio)
 	r = ti->type->map(ti, clone);
 	dm_offload_end(&o);
 
-	/*if (sysctl_mi_iolimit &&
+	if (sysctl_mi_iolimit &&
 			NULL != tio->clone.bi_disk->queue && NULL != tio->io->md->queue) {
 		io_stime = atomic64_read(&tio->clone.bi_disk->queue->io_stime);
 		io_wtime = atomic64_read(&tio->clone.bi_disk->queue->io_wtime);
 		atomic64_set(&tio->io->md->queue->io_stime, io_stime);
 		atomic64_set(&tio->io->md->queue->io_wtime, io_wtime);
-	}*/
-
-
+	}
 
 	switch (r) {
 	case DM_MAPIO_SUBMITTED:
@@ -1819,9 +1814,7 @@ static struct mapped_device *alloc_dev(int minor)
 	bio_set_dev(&md->flush_bio, md->bdev);
 	md->flush_bio.bi_opf = REQ_OP_WRITE | REQ_PREFLUSH | REQ_SYNC;
 
-	r = dm_stats_init(&md->stats);
-	if (r < 0)
-		goto bad;
+	dm_stats_init(&md->stats);
 
 	/* Populate the mapping, nobody knows we exist yet */
 	spin_lock(&_minor_lock);
@@ -2195,8 +2188,7 @@ static int dm_init_inline_encryption(struct mapped_device *md)
 		   BLK_CRYPTO_FEATURE_WRAPPED_KEYS;
 	memset(mode_masks, 0xFF, sizeof(mode_masks));
 
-	md->queue->ksm = keyslot_manager_create_passthrough(NULL,
-							    &dm_ksm_ll_ops,
+	md->queue->ksm = keyslot_manager_create_passthrough(&dm_ksm_ll_ops,
 							    features,
 							    mode_masks, md);
 	if (!md->queue->ksm)
@@ -2416,8 +2408,6 @@ static int dm_wait_for_completion(struct mapped_device *md, long task_state)
 		io_schedule();
 	}
 	finish_wait(&md->wait, &wait);
-
-	smp_rmb(); /* paired with atomic_dec_return in end_io_acct */
 
 	return r;
 }
@@ -2858,25 +2848,17 @@ EXPORT_SYMBOL_GPL(dm_internal_resume_fast);
 int dm_kobject_uevent(struct mapped_device *md, enum kobject_action action,
 		       unsigned cookie)
 {
-	int r;
-	unsigned noio_flag;
 	char udev_cookie[DM_COOKIE_LENGTH];
 	char *envp[] = { udev_cookie, NULL };
 
-	noio_flag = memalloc_noio_save();
-
 	if (!cookie)
-		r = kobject_uevent(&disk_to_dev(md->disk)->kobj, action);
+		return kobject_uevent(&disk_to_dev(md->disk)->kobj, action);
 	else {
 		snprintf(udev_cookie, DM_COOKIE_LENGTH, "%s=%u",
 			 DM_COOKIE_ENV_VAR_NAME, cookie);
-		r = kobject_uevent_env(&disk_to_dev(md->disk)->kobj,
-				       action, envp);
+		return kobject_uevent_env(&disk_to_dev(md->disk)->kobj,
+					  action, envp);
 	}
-
-	memalloc_noio_restore(noio_flag);
-
-	return r;
 }
 
 uint32_t dm_next_uevent_seq(struct mapped_device *md)
@@ -3045,11 +3027,6 @@ static int dm_call_pr(struct block_device *bdev, iterate_devices_callout_fn fn,
 	if (dm_table_get_num_targets(table) != 1)
 		goto out;
 	ti = dm_table_get_target(table, 0);
-
-	if (dm_suspended_md(md)) {
-		ret = -EAGAIN;
-		goto out;
-	}
 
 	ret = -EINVAL;
 	if (!ti->type->iterate_devices)

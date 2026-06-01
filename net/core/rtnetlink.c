@@ -59,9 +59,6 @@
 #include <net/rtnetlink.h>
 #include <net/net_namespace.h>
 
-#define RTNL_MAX_TYPE		48
-#define RTNL_SLAVE_MAX_TYPE	36
-
 struct rtnl_link {
 	rtnl_doit_func		doit;
 	rtnl_dumpit_func	dumpit;
@@ -321,11 +318,6 @@ EXPORT_SYMBOL_GPL(__rtnl_link_register);
 int rtnl_link_register(struct rtnl_link_ops *ops)
 {
 	int err;
-
-	/* Sanity-check max sizes to avoid stack buffer overflow. */
-	if (WARN_ON(ops->maxtype > RTNL_MAX_TYPE ||
-		    ops->slave_maxtype > RTNL_SLAVE_MAX_TYPE))
-		return -EINVAL;
 
 	rtnl_lock();
 	err = __rtnl_link_register(ops);
@@ -2531,9 +2523,9 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 {
 	struct net *net = sock_net(skb->sk);
 	const struct rtnl_link_ops *ops;
-	const struct rtnl_link_ops *m_ops;
+	const struct rtnl_link_ops *m_ops = NULL;
 	struct net_device *dev;
-	struct net_device *master_dev;
+	struct net_device *master_dev = NULL;
 	struct ifinfomsg *ifm;
 	char kind[MODULE_NAME_LEN];
 	char ifname[IFNAMSIZ];
@@ -2555,20 +2547,15 @@ replay:
 		ifname[0] = '\0';
 
 	ifm = nlmsg_data(nlh);
-	if (ifm->ifi_index > 0) {
+	if (ifm->ifi_index > 0)
 		dev = __dev_get_by_index(net, ifm->ifi_index);
-	} else if (ifm->ifi_index < 0) {
-		NL_SET_ERR_MSG(extack, "ifindex can't be negative");
-		return -EINVAL;
-	} else {
+	else {
 		if (ifname[0])
 			dev = __dev_get_by_name(net, ifname);
 		else
 			dev = NULL;
 	}
 
-	master_dev = NULL;
-	m_ops = NULL;
 	if (dev) {
 		master_dev = netdev_master_upper_dev_get(dev);
 		if (master_dev)
@@ -2597,16 +2584,13 @@ replay:
 	}
 
 	if (1) {
-		struct nlattr *attr[RTNL_MAX_TYPE + 1];
-		struct nlattr *slave_attr[RTNL_SLAVE_MAX_TYPE + 1];
+		struct nlattr *attr[ops ? ops->maxtype + 1 : 1];
+		struct nlattr *slave_attr[m_ops ? m_ops->slave_maxtype + 1 : 1];
 		struct nlattr **data = NULL;
 		struct nlattr **slave_data = NULL;
 		struct net *dest_net, *link_net = NULL;
 
 		if (ops) {
-			if (ops->maxtype > RTNL_MAX_TYPE)
-				return -EINVAL;
-
 			if (ops->maxtype && linkinfo[IFLA_INFO_DATA]) {
 				err = nla_parse_nested(attr, ops->maxtype,
 						       linkinfo[IFLA_INFO_DATA],
@@ -2623,9 +2607,6 @@ replay:
 		}
 
 		if (m_ops) {
-			if (m_ops->slave_maxtype > RTNL_SLAVE_MAX_TYPE)
-				return -EINVAL;
-
 			if (m_ops->slave_maxtype &&
 			    linkinfo[IFLA_INFO_SLAVE_DATA]) {
 				err = nla_parse_nested(slave_attr,
@@ -2752,8 +2733,7 @@ replay:
 			 */
 			if (err < 0) {
 				/* If device is not registered at all, free it now */
-				if (dev->reg_state == NETREG_UNINITIALIZED ||
-				    dev->reg_state == NETREG_UNREGISTERED)
+				if (dev->reg_state == NETREG_UNINITIALIZED)
 					free_netdev(dev);
 				goto out;
 			}
@@ -2993,7 +2973,7 @@ static int nlmsg_populate_fdb_fill(struct sk_buff *skb,
 	ndm->ndm_ifindex = dev->ifindex;
 	ndm->ndm_state   = ndm_state;
 
-	if (nla_put(skb, NDA_LLADDR, dev->addr_len, addr))
+	if (nla_put(skb, NDA_LLADDR, ETH_ALEN, addr))
 		goto nla_put_failure;
 	if (vid)
 		if (nla_put(skb, NDA_VLAN, sizeof(u16), &vid))
@@ -3007,10 +2987,10 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static inline size_t rtnl_fdb_nlmsg_size(const struct net_device *dev)
+static inline size_t rtnl_fdb_nlmsg_size(void)
 {
 	return NLMSG_ALIGN(sizeof(struct ndmsg)) +
-	       nla_total_size(dev->addr_len) +	/* NDA_LLADDR */
+	       nla_total_size(ETH_ALEN) +	/* NDA_LLADDR */
 	       nla_total_size(sizeof(u16)) +	/* NDA_VLAN */
 	       0;
 }
@@ -3022,7 +3002,7 @@ static void rtnl_fdb_notify(struct net_device *dev, u8 *addr, u16 vid, int type,
 	struct sk_buff *skb;
 	int err = -ENOBUFS;
 
-	skb = nlmsg_new(rtnl_fdb_nlmsg_size(dev), GFP_ATOMIC);
+	skb = nlmsg_new(rtnl_fdb_nlmsg_size(), GFP_ATOMIC);
 	if (!skb)
 		goto errout;
 
@@ -3667,10 +3647,6 @@ static int rtnl_bridge_notify(struct net_device *dev)
 	if (err < 0)
 		goto errout;
 
-	/* Notification info is only filled for bridge ports, not the bridge
-	 * device itself. Therefore, a zero notification length is valid and
-	 * should not result in an error.
-	 */
 	if (!skb->len)
 		goto errout;
 
@@ -4072,7 +4048,7 @@ nla_put_failure:
 static size_t if_nlmsg_stats_size(const struct net_device *dev,
 				  u32 filter_mask)
 {
-	size_t size = NLMSG_ALIGN(sizeof(struct if_stats_msg));
+	size_t size = 0;
 
 	if (stats_attr_valid(filter_mask, IFLA_STATS_LINK_64, 0))
 		size += nla_total_size_64bit(sizeof(struct rtnl_link_stats64));

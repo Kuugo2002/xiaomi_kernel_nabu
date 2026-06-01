@@ -433,7 +433,7 @@ static void arcnet_reply_tasklet(unsigned long data)
 
 	ret = sock_queue_err_skb(sk, ackskb);
 	if (ret)
-		dev_kfree_skb_irq(ackskb);
+		kfree_skb(ackskb);
 
 	local_irq_enable();
 };

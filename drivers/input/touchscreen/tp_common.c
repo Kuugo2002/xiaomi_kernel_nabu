@@ -1,6 +1,5 @@
 #include <linux/input/tp_common.h>
 
-bool capacitive_keys_enabled;
 struct kobject *touchpanel_kobj;
 
 #define TS_ENABLE_FOPS(type)                                                   \
@@ -13,9 +12,9 @@ struct kobject *touchpanel_kobj;
 		return sysfs_create_file(touchpanel_kobj, &kattr.attr);        \
 	}
 
-TS_ENABLE_FOPS(capacitive_keys)
 TS_ENABLE_FOPS(double_tap)
-TS_ENABLE_FOPS(reversed_keys)
+TS_ENABLE_FOPS(pen_update)
+TS_ENABLE_FOPS(pen_enable)
 
 static int __init tp_common_init(void)
 {
@@ -25,5 +24,4 @@ static int __init tp_common_init(void)
 
 	return 0;
 }
-
 core_initcall(tp_common_init);

@@ -617,9 +617,9 @@ int DS28E16_cmd_device_disable(int op, unsigned char *password)
 /// 'Compute and Read Page Authentication' command
 ///
 /// @param[in] anon - boolean parameter
-/// @param[in] pg - Page number   2,计数�? 0,page0; 1,page1;
+/// @param[in] pg - Page number   2,计数�? 0,page0; 1,page1;
 /// @param[in] challenge
-/// @param[out] hmac   返回的计算结�?2个字�?///
+/// @param[out] hmac   返回的计算结�?2个字�?///
 /// @return
 /// DS_TRUE - command successful @n
 /// DS_FALSE - command failed
@@ -1089,9 +1089,6 @@ static int verify_get_property(struct power_supply *psy, enum power_supply_prope
 {
 	int ret;
 	unsigned char buf[50];
-
-	if (psp == 4 || psp == 67)
-		return 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_VERIFY_MODEL_NAME:

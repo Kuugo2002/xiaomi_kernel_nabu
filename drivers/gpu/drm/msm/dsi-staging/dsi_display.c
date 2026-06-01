@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,7 +33,6 @@
 #include "dsi_pwr.h"
 #include "sde_dbg.h"
 #include "dsi_parser.h"
-#include "dsi_phy.h"
 
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 #define INT_BASE_10 10
@@ -238,6 +238,8 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	rc = dsi_panel_set_backlight(panel, (u32)bl_temp);
 	if (rc)
 		pr_err("unable to set backlight\n");
+	else
+		pr_info("set backlight successfully at: bl_scale = %u, bl_scale_ad = %u, bl_lvl = %u\n", bl_scale, bl_scale_ad, (u32)bl_temp);
 
 	rc = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_OFF);
@@ -4202,19 +4204,18 @@ static void _dsi_display_calc_pipe_delay(struct dsi_display *display,
 	struct dsi_display_ctrl *m_ctrl;
 	struct dsi_ctrl *dsi_ctrl;
 	struct dsi_phy_cfg *cfg;
-	int phy_ver;
 
 	m_ctrl = &display->ctrl[display->clk_master_idx];
 	dsi_ctrl = m_ctrl->ctrl;
 
 	cfg = &(m_ctrl->phy->cfg);
 
-	esc_clk_rate_hz = dsi_ctrl->clk_freq.esc_clk_rate;
-	pclk_to_esc_ratio = (dsi_ctrl->clk_freq.pix_clk_rate /
+	esc_clk_rate_hz = dsi_ctrl->clk_freq.esc_clk_rate * 1000;
+	pclk_to_esc_ratio = ((dsi_ctrl->clk_freq.pix_clk_rate * 1000) /
 			     esc_clk_rate_hz);
-	byte_to_esc_ratio = (dsi_ctrl->clk_freq.byte_clk_rate /
+	byte_to_esc_ratio = ((dsi_ctrl->clk_freq.byte_clk_rate * 1000) /
 			     esc_clk_rate_hz);
-	hr_bit_to_esc_ratio = ((dsi_ctrl->clk_freq.byte_clk_rate * 4) /
+	hr_bit_to_esc_ratio = ((dsi_ctrl->clk_freq.byte_clk_rate * 4 * 1000) /
 					esc_clk_rate_hz);
 
 	hsync_period = DSI_H_TOTAL_DSC(&mode->timing);
@@ -4240,17 +4241,8 @@ static void _dsi_display_calc_pipe_delay(struct dsi_display *display,
 			  ((cfg->timing.lane_v3[4] >> 1) + 1)) /
 			 hr_bit_to_esc_ratio);
 
-	/*
-	 *100us pll delay recommended for phy ver 2.0 and 3.0
-	 *25us pll delay recommended for phy ver 4.0
-	 */
-	phy_ver = dsi_phy_get_version(m_ctrl->phy);
-	if (phy_ver <= DSI_PHY_VERSION_3_0)
-		delay->pll_delay = 100;
-	else
-		delay->pll_delay = 25;
-
-	delay->pll_delay = (delay->pll_delay * esc_clk_rate_hz) / 1000000;
+	/* 130 us pll delay recommended by h/w doc */
+	delay->pll_delay = ((130 * esc_clk_rate_hz) / 1000000) * 2;
 }
 
 static int _dsi_display_dyn_update_clks(struct dsi_display *display,
@@ -5050,10 +5042,9 @@ static int dsi_display_link_clk_force_update_ctrl(void *handle)
 	return rc;
 }
 
-int dsi_display_clk_ctrl(void *handle, u32 type, u32 state)
+int dsi_display_clk_ctrl(void *handle,
+	enum dsi_clk_type clk_type, enum dsi_clk_state clk_state)
 {
-	enum dsi_clk_type clk_type = (enum dsi_clk_type)type;
-	enum dsi_clk_state clk_state = (enum dsi_clk_state)state;
 	int rc = 0;
 
 	if (!handle) {
@@ -6771,13 +6762,6 @@ int dsi_display_validate_mode_change(struct dsi_display *display,
 					DSI_MODE_FLAG_VRR) &&
 					(!dyn_clk_caps->maintain_const_fps)) {
 					pr_err("dfps and dyn clk concurrent\n");
-					rc = -ENOTSUPP;
-					goto error;
-				}
-
-				if (cur_mode->timing.refresh_rate !=
-						adj_mode->timing.refresh_rate) {
-					pr_err("fps change along with dyn clk not supported\n");
 					rc = -ENOTSUPP;
 					goto error;
 				}

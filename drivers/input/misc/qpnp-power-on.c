@@ -36,6 +36,7 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/qpnp/qpnp-pbs.h>
 #include <linux/qpnp/qpnp-misc.h>
+#include <asm/bootinfo.h>
 #include <linux/syscalls.h>
 
 #define PMIC_VER_8941				0x01
@@ -2518,6 +2519,7 @@ static int qpnp_pon_read_hardware_info(struct qpnp_pon *pon, bool sys_reset)
 		dev_info(dev, "PMIC@SID%d: Power-off reason: %s\n",
 			 to_spmi_device(dev->parent)->usid,
 			 qpnp_poff_reason[index]);
+		set_poweroff_reason(index);
 	}
 
 	if ((pon->pon_trigger_reason == PON_SMPL ||

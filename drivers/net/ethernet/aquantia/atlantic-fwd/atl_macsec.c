@@ -47,9 +47,8 @@ static int atl_apply_secy_cfg(struct atl_hw *hw,
 
 static void atl_ether_addr_to_mac(u32 mac[2], unsigned char *emac)
 {
-	u32 tmp[2];
+	u32 tmp[2] = { 0 };
 
-	memset(&tmp, 0, sizeof(tmp));
 	memcpy(((u8 *)tmp) + 2, emac, ETH_ALEN);
 
 	mac[0] = swab32(tmp[1]);
@@ -107,7 +106,7 @@ static int atl_get_txsc_idx_from_sc_idx(const enum atl_macsec_sc_sa sc_sa,
 /* Rotate keys u32[8] */
 static void atl_rotate_keys(u32 (*key)[8], int key_len)
 {
-	u32 tmp[8];
+	u32 tmp[8] = { 0 };
 
 	memcpy(&tmp, key, sizeof(tmp));
 	memset(*key, 0, sizeof(*key));

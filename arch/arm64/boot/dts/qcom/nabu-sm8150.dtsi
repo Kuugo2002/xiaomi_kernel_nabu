@@ -752,7 +752,7 @@ And public attribution of xiaomi platforms(like J20S and so and)
 		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
 		pinctrl-0 = <&ts_cs_active>;
 		pinctrl-1 = <&ts_cs_suspend>;
-		spi-max-frequency = <15000000>;	//4800000,9600000,15000000,19200000
+		spi-max-frequency = <9600000>;	//4800000,9600000,15000000,19200000
 		//novatek,reset-gpio = <&tlmm 75 0x00>;
 		novatek,irq-gpio = <&tlmm 39 0x2001>;
 

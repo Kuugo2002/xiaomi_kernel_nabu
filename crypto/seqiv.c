@@ -30,7 +30,7 @@ static void seqiv_aead_encrypt_complete2(struct aead_request *req, int err)
 	struct aead_request *subreq = aead_request_ctx(req);
 	struct crypto_aead *geniv;
 
-	if (err == -EINPROGRESS || err == -EBUSY)
+	if (err == -EINPROGRESS)
 		return;
 
 	if (err)
@@ -73,9 +73,9 @@ static int seqiv_aead_encrypt(struct aead_request *req)
 	info = req->iv;
 
 	if (req->src != req->dst) {
-		SYNC_SKCIPHER_REQUEST_ON_STACK(nreq, ctx->sknull);
+		SKCIPHER_REQUEST_ON_STACK(nreq, ctx->sknull);
 
-		skcipher_request_set_sync_tfm(nreq, ctx->sknull);
+		skcipher_request_set_tfm(nreq, ctx->sknull);
 		skcipher_request_set_callback(nreq, req->base.flags,
 					      NULL, NULL);
 		skcipher_request_set_crypt(nreq, req->src, req->dst,

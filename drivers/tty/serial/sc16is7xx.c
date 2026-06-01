@@ -699,18 +699,6 @@ static bool sc16is7xx_port_irq(struct sc16is7xx_port *s, int portno)
 		case SC16IS7XX_IIR_RTOI_SRC:
 		case SC16IS7XX_IIR_XOFFI_SRC:
 			rxlen = sc16is7xx_port_read(port, SC16IS7XX_RXLVL_REG);
-
-			/*
-			 * There is a silicon bug that makes the chip report a
-			 * time-out interrupt but no data in the FIFO. This is
-			 * described in errata section 18.1.4.
-			 *
-			 * When this happens, read one byte from the FIFO to
-			 * clear the interrupt.
-			 */
-			if (iir == SC16IS7XX_IIR_RTOI_SRC && !rxlen)
-				rxlen = 1;
-
 			if (rxlen)
 				sc16is7xx_handle_rx(port, rxlen, iir);
 			break;
@@ -1183,18 +1171,9 @@ static int sc16is7xx_gpio_direction_output(struct gpio_chip *chip,
 		state |= BIT(offset);
 	else
 		state &= ~BIT(offset);
-
-	/*
-	 * If we write IOSTATE first, and then IODIR, the output value is not
-	 * transferred to the corresponding I/O pin.
-	 * The datasheet states that each register bit will be transferred to
-	 * the corresponding I/O pin programmed as output when writing to
-	 * IOSTATE. Therefore, configure direction first with IODIR, and then
-	 * set value after with IOSTATE.
-	 */
+	sc16is7xx_port_write(port, SC16IS7XX_IOSTATE_REG, state);
 	sc16is7xx_port_update(port, SC16IS7XX_IODIR_REG, BIT(offset),
 			      BIT(offset));
-	sc16is7xx_port_write(port, SC16IS7XX_IOSTATE_REG, state);
 
 	return 0;
 }
@@ -1545,11 +1524,9 @@ static int __init sc16is7xx_init(void)
 #endif
 	return ret;
 
-#ifdef CONFIG_SERIAL_SC16IS7XX_SPI
 err_spi:
 #ifdef CONFIG_SERIAL_SC16IS7XX_I2C
 	i2c_del_driver(&sc16is7xx_i2c_uart_driver);
-#endif
 #endif
 err_i2c:
 	uart_unregister_driver(&sc16is7xx_uart);

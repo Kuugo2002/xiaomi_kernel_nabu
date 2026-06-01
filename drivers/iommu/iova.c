@@ -68,7 +68,8 @@ static void free_iova_flush_queue(struct iova_domain *iovad)
 	if (!has_iova_flush_queue(iovad))
 		return;
 
-	del_timer_sync(&iovad->fq_timer);
+	if (timer_pending(&iovad->fq_timer))
+		del_timer(&iovad->fq_timer);
 
 	fq_destroy_all_entries(iovad);
 
@@ -862,9 +863,7 @@ iova_magazine_free_pfns(struct iova_magazine *mag, struct iova_domain *iovad)
 	for (i = 0 ; i < mag->size; ++i) {
 		struct iova *iova = private_find_iova(iovad, mag->pfns[i]);
 
-		if (WARN_ON(!iova))
-			continue;
-
+		BUG_ON(!iova);
 		private_free_iova(iovad, iova);
 	}
 

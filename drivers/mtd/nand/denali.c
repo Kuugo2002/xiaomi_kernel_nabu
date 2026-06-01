@@ -1444,7 +1444,9 @@ EXPORT_SYMBOL(denali_init);
 /* driver exit point */
 void denali_remove(struct denali_nand_info *denali)
 {
-	nand_release(&denali->nand);
+	struct mtd_info *mtd = nand_to_mtd(&denali->nand);
+
+	nand_release(mtd);
 	kfree(denali->buf);
 	denali_disable_irq(denali);
 }

@@ -19,7 +19,7 @@
 
 struct nft_cmp_expr {
 	struct nft_data		data;
-	u8			sreg;
+	enum nft_registers	sreg:8;
 	u8			len;
 	enum nft_cmp_ops	op:8;
 };
@@ -79,7 +79,8 @@ static int nft_cmp_init(const struct nft_ctx *ctx, const struct nft_expr *expr,
 			    tb[NFTA_CMP_DATA]);
 	BUG_ON(err < 0);
 
-	err = nft_parse_register_load(tb[NFTA_CMP_SREG], &priv->sreg, desc.len);
+	priv->sreg = nft_parse_register(tb[NFTA_CMP_SREG]);
+	err = nft_validate_register_load(priv->sreg, desc.len);
 	if (err < 0)
 		return err;
 
@@ -128,7 +129,8 @@ static int nft_cmp_fast_init(const struct nft_ctx *ctx,
 			    tb[NFTA_CMP_DATA]);
 	BUG_ON(err < 0);
 
-	err = nft_parse_register_load(tb[NFTA_CMP_SREG], &priv->sreg, desc.len);
+	priv->sreg = nft_parse_register(tb[NFTA_CMP_SREG]);
+	err = nft_validate_register_load(priv->sreg, desc.len);
 	if (err < 0)
 		return err;
 

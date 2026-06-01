@@ -15,10 +15,9 @@
 
 #include "adreno.h"
 
-#ifdef ADRENO_IS_NOT_6XX
 extern const unsigned int a3xx_cp_addr_regs[];
 extern const unsigned int a4xx_cp_addr_regs[];
-#endif
+
 /*
  * struct adreno_ib_object - Structure containing information about an
  * address range found in an IB
@@ -138,12 +137,10 @@ static inline int adreno_cp_parser_getreg(struct adreno_device *adreno_dev,
 	if (reg_enum == ADRENO_CP_ADDR_MAX)
 		return -EEXIST;
 
-#ifdef ADRENO_IS_NOT_6XX
 	if (adreno_is_a3xx(adreno_dev))
 		return a3xx_cp_addr_regs[reg_enum];
 	else if (adreno_is_a4xx(adreno_dev))
 		return a4xx_cp_addr_regs[reg_enum];
-#endif
 	else
 		return -EEXIST;
 }
@@ -166,13 +163,11 @@ static inline int adreno_cp_parser_regindex(struct adreno_device *adreno_dev,
 	int i;
 	const unsigned int *regs;
 
-#ifdef ADRENO_IS_NOT_6XX
 	if (adreno_is_a4xx(adreno_dev))
 		regs = a4xx_cp_addr_regs;
 	else if (adreno_is_a3xx(adreno_dev))
 		regs = a3xx_cp_addr_regs;
 	else
-#endif
 		return -EEXIST;
 
 	for (i = start; i <= end && i < ADRENO_CP_ADDR_MAX; i++)

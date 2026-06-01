@@ -327,6 +327,11 @@ static int32_t update_firmware_request(const char *filename)
 	uint8_t retry = 0;
 	int32_t ret = 0;
 
+	if (ts->pen_update) {
+		pr_info("[mi-pen]: Force request firmware\n");
+		filename = "novatek_nt36523_k82_fw01_pen.bin";
+	}
+
 	if (NULL == filename) {
 		return -ENOENT;
 	}

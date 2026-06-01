@@ -129,10 +129,8 @@ static int __control_devkmsg(char *str)
 
 static int __init control_devkmsg(char *str)
 {
-	if (__control_devkmsg(str) < 0) {
-		pr_warn("printk.devkmsg: bad option string '%s'\n", str);
+	if (__control_devkmsg(str) < 0)
 		return 1;
-	}
 
 	/*
 	 * Set sysctl string accordingly:
@@ -154,7 +152,7 @@ static int __init control_devkmsg(char *str)
 	 */
 	devkmsg_log |= DEVKMSG_LOG_MASK_LOCK;
 
-	return 1;
+	return 0;
 }
 __setup("printk.devkmsg=", control_devkmsg);
 
@@ -804,9 +802,6 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 	 */
 	line = buf;
 	if (line[0] == '<') {
-		if (memcmp(line+3, "batteryd", sizeof("batteryd")-1) == 0 ||
-			   memcmp(line+3, "healthd", sizeof("healthd")-1) == 0)
-			goto ignore;
 		char *endp = NULL;
 		unsigned int u;
 
@@ -818,13 +813,10 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 			endp++;
 			len -= endp - line;
 			line = endp;
-			if(strncmp(line, "logd: Skipping", sizeof("logd: Skipping")))
-				goto ignore;
 		}
 	}
 
 	printk_emit(facility, level, NULL, 0, "%s", line);
-ignore:
 	kfree(buf);
 	return ret;
 }
@@ -2107,16 +2099,6 @@ static int __init console_setup(char *str)
 	char buf[sizeof(console_cmdline[0].name) + 4]; /* 4 for "ttyS" */
 	char *s, *options, *brl_options = NULL;
 	int idx;
-
-	/*
-	 * console="" or console=null have been suggested as a way to
-	 * disable console output. Use ttynull that has been created
-	 * for exacly this purpose.
-	 */
-	if (str[0] == 0 || strcmp(str, "null") == 0) {
-		__add_preferred_console("ttynull", 0, NULL, NULL);
-		return 1;
-	}
 
 	if (_braille_console_setup(&str, &brl_options))
 		return 1;

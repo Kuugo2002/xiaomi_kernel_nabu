@@ -328,8 +328,8 @@ struct l2tp_session *l2tp_session_get_by_ifname(const struct net *net,
 }
 EXPORT_SYMBOL_GPL(l2tp_session_get_by_ifname);
 
-int l2tp_session_register(struct l2tp_session *session,
-			  struct l2tp_tunnel *tunnel)
+static int l2tp_session_add_to_tunnel(struct l2tp_tunnel *tunnel,
+				      struct l2tp_session *session)
 {
 	struct l2tp_session *session_walk;
 	struct hlist_head *g_head;
@@ -382,10 +382,6 @@ int l2tp_session_register(struct l2tp_session *session,
 	hlist_add_head(&session->hlist, head);
 	write_unlock_bh(&tunnel->hlist_lock);
 
-	/* Ignore management session in session count value */
-	if (session->session_id != 0)
-		atomic_inc(&l2tp_session_count);
-
 	return 0;
 
 err_tlock_pnlock:
@@ -395,7 +391,6 @@ err_tlock:
 
 	return err;
 }
-EXPORT_SYMBOL_GPL(l2tp_session_register);
 
 /* Lookup a tunnel by id
  */
@@ -986,10 +981,8 @@ static int l2tp_udp_recv_core(struct l2tp_tunnel *tunnel, struct sk_buff *skb)
 	}
 
 	if (tunnel->version == L2TP_HDR_VER_3 &&
-	    l2tp_v3_ensure_opt_in_linear(session, skb, &ptr, &optr)) {
-		l2tp_session_dec_refcount(session);
+	    l2tp_v3_ensure_opt_in_linear(session, skb, &ptr, &optr))
 		goto error;
-	}
 
 	l2tp_recv_common(session, skb, ptr, optr, hdrflags, length);
 	l2tp_session_dec_refcount(session);
@@ -1135,7 +1128,6 @@ static int l2tp_xmit_core(struct l2tp_session *session, struct sk_buff *skb,
 
 	/* Queue the packet to IP for output */
 	skb->ignore_df = 1;
-	skb_dst_drop(skb);
 #if IS_ENABLED(CONFIG_IPV6)
 	if (l2tp_sk_is_v6(tunnel->sock))
 		error = inet6_csk_xmit(tunnel->sock, skb, NULL);
@@ -1208,6 +1200,10 @@ int l2tp_xmit_skb(struct l2tp_session *session, struct sk_buff *skb, int hdr_len
 		ret = NET_XMIT_DROP;
 		goto out_unlock;
 	}
+
+	/* Get routing info from the tunnel socket */
+	skb_dst_drop(skb);
+	skb_dst_set(skb, sk_dst_check(sk, 0));
 
 	inet = inet_sk(sk);
 	fl = &inet->cork.fl;
@@ -1580,8 +1576,6 @@ int l2tp_tunnel_create(struct net *net, int fd, int version, u32 tunnel_id, u32 
 			 tunnel_id, fd);
 		goto err;
 	}
-	if (sk->sk_family != PF_INET && sk->sk_family != PF_INET6)
-		goto err;
 	switch (encap) {
 	case L2TP_ENCAPTYPE_UDP:
 		if (sk->sk_protocol != IPPROTO_UDP) {
@@ -1789,6 +1783,7 @@ EXPORT_SYMBOL_GPL(l2tp_session_set_header_len);
 struct l2tp_session *l2tp_session_create(int priv_size, struct l2tp_tunnel *tunnel, u32 session_id, u32 peer_session_id, struct l2tp_session_cfg *cfg)
 {
 	struct l2tp_session *session;
+	int err;
 
 	session = kzalloc(sizeof(struct l2tp_session) + priv_size, GFP_KERNEL);
 	if (session != NULL) {
@@ -1844,6 +1839,17 @@ struct l2tp_session *l2tp_session_create(int priv_size, struct l2tp_tunnel *tunn
 		l2tp_session_set_header_len(session, tunnel->version);
 
 		refcount_set(&session->ref_count, 1);
+
+		err = l2tp_session_add_to_tunnel(tunnel, session);
+		if (err) {
+			kfree(session);
+
+			return ERR_PTR(err);
+		}
+
+		/* Ignore management session in session count value */
+		if (session->session_id != 0)
+			atomic_inc(&l2tp_session_count);
 
 		return session;
 	}

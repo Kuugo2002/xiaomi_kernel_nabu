@@ -318,7 +318,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 			*priv = *priv_match;
 	}
 
-	device_set_wakeup_capable(&pdev->dev, true);
+	device_wakeup_enable(hcd->self.controller);
 
 	xhci->clk = clk;
 	xhci->main_hcd = hcd;
@@ -430,7 +430,6 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct clk *clk = xhci->clk;
 	struct usb_hcd *shared_hcd = xhci->shared_hcd;
 
-	pm_runtime_get_sync(&dev->dev);
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
 
 	device_remove_file(&dev->dev, &dev_attr_config_imod);
@@ -445,9 +444,8 @@ static int xhci_plat_remove(struct platform_device *dev)
 		clk_disable_unprepare(clk);
 	usb_put_hcd(hcd);
 
-	pm_runtime_disable(&dev->dev);
-	pm_runtime_put_noidle(&dev->dev);
 	pm_runtime_set_suspended(&dev->dev);
+	pm_runtime_disable(&dev->dev);
 
 	return 0;
 }

@@ -16,6 +16,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#define ENABLE_ALARMTIMER_RECORD
 #include <linux/time.h>
 #include <linux/hrtimer.h>
 #include <linux/timerqueue.h>
@@ -30,13 +31,12 @@
 #include <linux/freezer.h>
 #include <linux/compat.h>
 #include <linux/module.h>
-#include "posix-timers.h"
-
-#define ENABLE_ALARMTIMER_RECORD	0
-
-#if ENABLE_ALARMTIMER_RECORD
+#ifdef ENABLE_ALARMTIMER_RECORD
 #include <linux/proc_fs.h>
 #include <linux/slab.h>
+
+
+#include "posix-timers.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/alarmtimer.h>
@@ -51,11 +51,6 @@ static struct alarmtimer_record_buff alarmtimer_set_record_buff[ALARMTIMER_RECOR
 static u32 alarmtimer_num = 0;
 static u32 index_head = 0;
 static u32 index_tail = 0;
-#else
-#define trace_alarmtimer_suspend(...)	0
-#define trace_alarmtimer_fired(...)		0
-#define trace_alarmtimer_start(...)		0
-#define trace_alarmtimer_cancel(...)	0
 #endif
 /**
  * struct alarm_base - Alarm timer bases
@@ -88,7 +83,7 @@ static struct rtc_device	*rtcdev;
 static DEFINE_SPINLOCK(rtcdev_lock);
 bool alarm_fired;
 
-#if ENABLE_ALARMTIMER_RECORD
+#ifdef ENABLE_ALARMTIMER_RECORD
 static void alarmtimer_collect(struct alarm *alarm)
 {
 	static int m = 0;
@@ -246,7 +241,7 @@ static void alarmtimer_enqueue(struct alarm_base *base, struct alarm *alarm)
 	if (alarm->state & ALARMTIMER_STATE_ENQUEUED)
 		timerqueue_del(&base->timerqueue, &alarm->node);
 
-#if ENABLE_ALARMTIMER_RECORD
+#ifdef ENABLE_ALARMTIMER_RECORD
 	alarmtimer_collect(alarm);
 #endif
 	timerqueue_add(&base->timerqueue, &alarm->node);
@@ -559,35 +554,11 @@ u64 alarm_forward(struct alarm *alarm, ktime_t now, ktime_t interval)
 }
 EXPORT_SYMBOL_GPL(alarm_forward);
 
-static u64 __alarm_forward_now(struct alarm *alarm, ktime_t interval, bool throttle)
-{
-	struct alarm_base *base = &alarm_bases[alarm->type];
-	ktime_t now = base->gettime();
-
-	if (IS_ENABLED(CONFIG_HIGH_RES_TIMERS) && throttle) {
-		/*
-		 * Same issue as with posix_timer_fn(). Timers which are
-		 * periodic but the signal is ignored can starve the system
-		 * with a very small interval. The real fix which was
-		 * promised in the context of posix_timer_fn() never
-		 * materialized, but someone should really work on it.
-		 *
-		 * To prevent DOS fake @now to be 1 jiffie out which keeps
-		 * the overrun accounting correct but creates an
-		 * inconsistency vs. timer_gettime(2).
-		 */
-		ktime_t kj = NSEC_PER_SEC / HZ;
-
-		if (interval < kj)
-			now = ktime_add(now, kj);
-	}
-
-	return alarm_forward(alarm, now, interval);
-}
-
 u64 alarm_forward_now(struct alarm *alarm, ktime_t interval)
 {
-	return __alarm_forward_now(alarm, interval, false);
+	struct alarm_base *base = &alarm_bases[alarm->type];
+
+	return alarm_forward(alarm, base->gettime(), interval);
 }
 EXPORT_SYMBOL_GPL(alarm_forward_now);
 
@@ -661,10 +632,9 @@ static enum alarmtimer_restart alarm_handle_timer(struct alarm *alarm,
 	if (posix_timer_event(ptr, si_private) && ptr->it_interval) {
 		/*
 		 * Handle ignored signals and rearm the timer. This will go
-		 * away once we handle ignored signals proper. Ensure that
-		 * small intervals cannot starve the system.
+		 * away once we handle ignored signals proper.
 		 */
-		ptr->it_overrun += __alarm_forward_now(alarm, ptr->it_interval, true);
+		ptr->it_overrun += alarm_forward_now(alarm, ptr->it_interval);
 		++ptr->it_requeue_pending;
 		ptr->it_active = 1;
 		result = ALARMTIMER_RESTART;
@@ -930,9 +900,9 @@ static int alarm_timer_nsleep(const clockid_t which_clock, int flags,
 	if (flags == TIMER_ABSTIME)
 		return -ERESTARTNOHAND;
 
+	restart->fn = alarm_timer_nsleep_restart;
 	restart->nanosleep.clockid = type;
 	restart->nanosleep.expires = exp;
-	set_restart_fn(restart, alarm_timer_nsleep_restart);
 	return ret;
 }
 
@@ -965,7 +935,7 @@ static struct platform_driver alarmtimer_driver = {
 		.pm = &alarmtimer_pm_ops,
 	}
 };
-#if ENABLE_ALARMTIMER_RECORD
+#ifdef ENABLE_ALARMTIMER_RECORD
 static int alarmtimer_seq_show(struct seq_file *seq, void *v)
 {
 	struct rtc_time tm;
@@ -1022,7 +992,7 @@ static int __init alarmtimer_init(void)
 	struct platform_device *pdev;
 	int error = 0;
 	int i;
-	#if ENABLE_ALARMTIMER_RECORD
+	#ifdef ENABLE_ALARMTIMER_RECORD
 	struct proc_dir_entry *entry;
 	#endif
 
@@ -1052,7 +1022,7 @@ static int __init alarmtimer_init(void)
 		goto out_drv;
 	}
 	
-	#if ENABLE_ALARMTIMER_RECORD
+	#ifdef ENABLE_ALARMTIMER_RECORD
 	entry = proc_create("alarmtimer_records", 0, NULL, &alarmtimer_records_fileops);
 	if (!entry)
 		printk(KERN_ERR "kobject_uevent: unable to create uevents_records!\n");

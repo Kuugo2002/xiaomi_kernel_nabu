@@ -1,4 +1,4 @@
-/* Copyright (c)2017-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c)2017-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -388,7 +388,6 @@ static struct a6xx_protected_regs {
 	{ 0x8D0, 0x23, 0 },
 	{ 0x980, 0x4, 0 },
 	{ 0xA630, 0x0, 1 },
-	{ 0x1b400, 0x1fff, 1 },
 };
 
 /* IFPC & Preemption static powerup restore list */
@@ -1514,14 +1513,10 @@ static int a6xx_reset(struct kgsl_device *device, int fault)
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	int ret = -EINVAL;
 	int i = 0;
-	unsigned long flags = device->pwrctrl.ctrl_flags;
 
 	/* Use the regular reset sequence for No GMU */
 	if (!gmu_core_gpmu_isenabled(device))
 		return adreno_reset(device, fault);
-
-	/* Clear ctrl_flags to ensure clocks and regulators are turned off */
-	device->pwrctrl.ctrl_flags = 0;
 
 	/* Transition from ACTIVE to RESET state */
 	kgsl_pwrctrl_change_state(device, KGSL_STATE_RESET);
@@ -1543,8 +1538,6 @@ static int a6xx_reset(struct kgsl_device *device, int fault)
 
 	if (i != 0)
 		KGSL_DRV_WARN(device, "Device hard reset tried %d tries\n", i);
-
-	device->pwrctrl.ctrl_flags = flags;
 
 	/*
 	 * If active_cnt is non-zero then the system was active before
@@ -1850,7 +1843,6 @@ static struct adreno_irq a6xx_irq = {
 	.mask = A6XX_INT_MASK,
 };
 
-#ifdef CONFIG_CORESIGHT
 static bool adreno_is_qdss_dbg_register(struct kgsl_device *device,
 		unsigned int offsetwords)
 {
@@ -1861,6 +1853,7 @@ static bool adreno_is_qdss_dbg_register(struct kgsl_device *device,
 		(offsetwords < (adreno_dev->qdss_gfx_base +
 				adreno_dev->qdss_gfx_len) >> 2);
 }
+
 
 static void adreno_qdss_gfx_dbg_regread(struct kgsl_device *device,
 	unsigned int offsetwords, unsigned int *value)
@@ -2420,7 +2413,6 @@ static struct adreno_coresight a6xx_coresight_cx = {
 	.read = adreno_cx_dbgc_regread,
 	.write = adreno_cx_dbgc_regwrite,
 };
-#endif /* CONFIG_CORESIGHT */
 
 static struct adreno_perfcount_register a6xx_perfcounters_cp[] = {
 	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, A6XX_RBBM_PERFCTR_CP_0_LO,
@@ -3383,9 +3375,7 @@ struct adreno_gpudev adreno_a6xx_gpudev = {
 	.ccu_invalidate = a6xx_ccu_invalidate,
 	.perfcounter_init = a6xx_perfcounter_init,
 	.perfcounter_update = a6xx_perfcounter_update,
-#ifdef CONFIG_CORESIGHT
 	.coresight = {&a6xx_coresight, &a6xx_coresight_cx},
-#endif
 	.clk_set_options = a6xx_clk_set_options,
 	.snapshot_preemption = a6xx_snapshot_preemption,
 	.zap_shader_unload = a6xx_zap_shader_unload,

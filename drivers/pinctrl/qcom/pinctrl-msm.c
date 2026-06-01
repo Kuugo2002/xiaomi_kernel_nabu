@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
- * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
+ * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -93,7 +94,6 @@ struct msm_pinctrl {
 	const struct msm_pinctrl_soc_data *soc;
 	void __iomem *regs;
 	void __iomem *pdc_regs;
-	void __iomem *spi_base;
 #ifdef CONFIG_FRAGMENTED_GPIO_ADDRESS_SPACE
 	/* For holding per tile virtual address */
 	void __iomem *per_tile_regs[4];
@@ -1448,7 +1448,6 @@ static void add_dirconn_tlmm(struct irq_data *d, irq_hw_number_t irq)
 	struct msm_pinctrl *pctrl;
 	phys_addr_t spi_cfg_reg = 0;
 	unsigned long flags;
-	u32 offset_local;
 
 	offset = select_dir_conn_mux(d, &irq);
 	if (offset < 0 || !parent_data)
@@ -1469,19 +1468,16 @@ static void add_dirconn_tlmm(struct irq_data *d, irq_hw_number_t irq)
 		if (pctrl->spi_cfg_regs) {
 			spi_cfg_reg = pctrl->spi_cfg_regs +
 					((dir_conn_data->hwirq - 32) / 32) * 4;
-			offset_local = ((dir_conn_data->hwirq - 32) / 32) * 4;
 			if (spi_cfg_reg < pctrl->spi_cfg_end) {
 				raw_spin_lock_irqsave(&pctrl->lock, flags);
-				val = readl_relaxed(pctrl->spi_base
-							+ offset_local);
+				val = scm_io_read(spi_cfg_reg);
 				/*
 				 * Clear the respective bit for edge type
 				 * interrupt
 				 */
 				val &= ~(1 << ((dir_conn_data->hwirq - 32)
 									% 32));
-				writel_relaxed(val, pctrl->spi_base
-							+ offset_local);
+				WARN_ON(scm_io_write(spi_cfg_reg, val));
 				raw_spin_unlock_irqrestore(&pctrl->lock, flags);
 			} else
 				pr_err("%s: type config failed for SPI: %lu\n",
@@ -1535,7 +1531,6 @@ static int msm_dirconn_irq_set_type(struct irq_data *d, unsigned int type)
 	unsigned int config_val = 0;
 	unsigned int val = 0;
 	unsigned long flags;
-	u32 offset_local;
 
 	if (!parent_data)
 		return 0;
@@ -1563,14 +1558,13 @@ static int msm_dirconn_irq_set_type(struct irq_data *d, unsigned int type)
 	if (pctrl->spi_cfg_regs && type != IRQ_TYPE_NONE) {
 		spi_cfg_reg = pctrl->spi_cfg_regs +
 				((parent_data->hwirq - 32) / 32) * 4;
-		offset_local = ((parent_data->hwirq - 32) / 32) * 4;
 		if (spi_cfg_reg < pctrl->spi_cfg_end) {
 			raw_spin_lock_irqsave(&pctrl->lock, flags);
-			val = readl_relaxed(pctrl->spi_base + offset_local);
+			val = scm_io_read(spi_cfg_reg);
 			val &= ~(1 << ((parent_data->hwirq - 32) % 32));
 			if (config_val)
 				val |= (1 << ((parent_data->hwirq - 32)  % 32));
-			writel_relaxed(val, pctrl->spi_base + offset_local);
+			WARN_ON(scm_io_write(spi_cfg_reg, val));
 			raw_spin_unlock_irqrestore(&pctrl->lock, flags);
 		} else
 			pr_err("%s: type config failed for SPI: %lu\n",
@@ -1927,7 +1921,7 @@ static int msm_pinctrl_hibernation_suspend(void)
 		spi_cfg_reg = pctrl->spi_cfg_regs;
 		for (j = 0; j < spi_cfg_regs_count; j++)
 			pctrl->spi_cfg_regs_val[j] =
-				readl_relaxed(pctrl->spi_base + j * 4);
+				scm_io_read(spi_cfg_reg + j * 4);
 	}
 	/* All normal gpios will have common registers, first save them */
 	for (i = 0; i < soc->ngpios; i++) {
@@ -1984,8 +1978,8 @@ static void msm_pinctrl_hibernation_resume(void)
 				pctrl->spi_cfg_regs) / 4 + 2;
 		spi_cfg_reg = pctrl->spi_cfg_regs;
 		for (j = 0; j < spi_cfg_regs_count; j++)
-			writel_relaxed(pctrl->spi_cfg_regs_val[j],
-					pctrl->spi_base + j * 4);
+			WARN_ON(scm_io_write(spi_cfg_reg + j * 4,
+				pctrl->spi_cfg_regs_val[j]));
 	}
 
 	/* Restore normal gpios */
@@ -2072,35 +2066,6 @@ static struct syscore_ops msm_pinctrl_pm_ops = {
 	.resume = msm_pinctrl_resume,
 };
 
-/*
- * msm_gpio_mpm_wake_set - API to make interrupt wakeup capable
- * @gpio:       Gpio number to make interrupt wakeup capable
- * @enable:     Enable/Disable wakeup capability
- */
-int msm_gpio_mpm_wake_set(unsigned int gpio, bool enable)
-{
-	const struct msm_pingroup *g;
-	unsigned long flags;
-	u32 val;
-
-	g = &msm_pinctrl_data->soc->groups[gpio];
-	if (g->wake_bit == -1)
-		return -ENOENT;
-
-	raw_spin_lock_irqsave(&msm_pinctrl_data->lock, flags);
-	val = readl_relaxed(msm_pinctrl_data->regs + g->wake_reg);
-	if (enable)
-		val |= BIT(g->wake_bit);
-	else
-		val &= ~BIT(g->wake_bit);
-
-	writel_relaxed(val, msm_pinctrl_data->regs + g->wake_reg);
-	raw_spin_unlock_irqrestore(&msm_pinctrl_data->lock, flags);
-
-	return 0;
-}
-EXPORT_SYMBOL(msm_gpio_mpm_wake_set);
-
 int msm_pinctrl_probe(struct platform_device *pdev,
 		      const struct msm_pinctrl_soc_data *soc_data)
 {
@@ -2148,7 +2113,6 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 	key = "spi_cfg";
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, key);
 	if (res) {
-		pctrl->spi_base = devm_ioremap_resource(&pdev->dev, res);
 		pctrl->spi_cfg_regs = res->start;
 		pctrl->spi_cfg_end = res->end;
 	}

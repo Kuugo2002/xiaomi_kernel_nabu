@@ -129,10 +129,10 @@ static void print_extent_item(struct extent_buffer *eb, int slot, int type)
 			pr_cont("shared data backref parent %llu count %u\n",
 			       offset, btrfs_shared_data_ref_count(eb, sref));
 			/*
-			 * Offset is supposed to be a tree block which must be
-			 * aligned to sectorsize.
+			 * offset is supposed to be a tree block which
+			 * must be aligned to nodesize.
 			 */
-			if (!IS_ALIGNED(offset, eb->fs_info->sectorsize))
+			if (!IS_ALIGNED(offset, eb->fs_info->nodesize))
 				pr_info("\t\t\t(parent %llu is NOT ALIGNED to nodesize %llu)\n",
 				     offset, (unsigned long long)eb->fs_info->nodesize);
 			break;

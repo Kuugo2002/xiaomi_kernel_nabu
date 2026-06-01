@@ -19,7 +19,7 @@
 
 #define istate core_internal_state__do_not_mess_with_it
 
-#define noirqdebug 1
+extern bool noirqdebug;
 
 extern struct irqaction chained_action;
 

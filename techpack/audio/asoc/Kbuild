@@ -189,11 +189,9 @@ CDEFINES +=	-DANI_LITTLE_BYTE_ENDIAN \
 CDEFINES += -DCONFIG_SND_SOC_TAS256X_FOR_DAVI
 TARGET_PRODUCT := nabu
 
-
 ifeq ($(TARGET_PRODUCT), nabu)
 	CDEFINES += -DCONFIG_TARGET_PRODUCT_NABU
 endif
-
 
 KBUILD_CPPFLAGS += $(CDEFINES)
 
@@ -251,3 +249,6 @@ machine_dlkm-y := $(MACHINE_OBJS)
 
 obj-$(CONFIG_SND_SOC_CPE) += cpe_lsm_dlkm.o
 cpe_lsm_dlkm-y := $(CPE_LSM_OBJS)
+
+# inject some build related information
+DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

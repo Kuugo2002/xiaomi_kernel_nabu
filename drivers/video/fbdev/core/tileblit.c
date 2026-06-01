@@ -13,7 +13,6 @@
 #include <linux/fb.h>
 #include <linux/vt_kern.h>
 #include <linux/console.h>
-#include <linux/font.h>
 #include <asm/types.h>
 #include "fbcon.h"
 

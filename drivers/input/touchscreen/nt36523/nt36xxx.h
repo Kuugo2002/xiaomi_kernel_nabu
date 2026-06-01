@@ -90,8 +90,6 @@ extern const uint16_t touch_key_array[TOUCH_KEY_NUM];
 //---Customerized func.---
 #define NVT_TOUCH_PROC 1
 #define NVT_TOUCH_EXT_PROC 1
-#define NVT_TOUCH_MP 1
-#define NVT_TOUCH_MP_SETTING_CRITERIA_FROM_CSV 1
 #define MT_PROTOCOL_B 1
 #define WAKEUP_GESTURE 1
 #define FUNCPAGE_PALM 4
@@ -106,7 +104,7 @@ extern const uint16_t gesture_key_array[];
 #define DEFAULT_MP_UPDATE_FIRMWARE_NAME   "novatek_ts_mp.bin"
 #define DEFAULT_DEBUG_FW_NAME "novatek_debug_fw.bin"
 #define DEFAULT_DEBUG_MP_NAME "novatek_debug_mp.bin"
-#define POINT_DATA_CHECKSUM 0
+#define POINT_DATA_CHECKSUM 1
 #define POINT_DATA_CHECKSUM_LEN 65
 #define CHECK_PEN_DATA_CHECKSUM 0
 
@@ -220,8 +218,8 @@ struct nvt_ts_data {
 	struct pinctrl *ts_pinctrl;
 	struct pinctrl_state *pinctrl_state_active;
 	struct pinctrl_state *pinctrl_state_suspend;
-#ifndef NVT_SAVE_TESTDATA_IN_FILE
-	void *testdata;
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+	bool pen_update;
 #endif
 };
 

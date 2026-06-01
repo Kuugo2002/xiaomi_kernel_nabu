@@ -533,7 +533,7 @@ config PCI_ENDPOINT_TEST
 
 config UID_SYS_STATS
 	bool "Per-UID statistics"
-	depends on TASK_XACCT && TASK_IO_ACCOUNTING
+	depends on PROFILING && TASK_XACCT && TASK_IO_ACCOUNTING
 	help
 	  Per UID based cpu time statistics exported to /proc/uid_cputime
 	  Per UID based io statistics exported to /proc/uid_io
@@ -548,6 +548,7 @@ config UID_SYS_STATS_DEBUG
 
 config MEMORY_STATE_TIME
 	tristate "Memory freq/bandwidth time statistics"
+	depends on PROFILING
 	help
 	  Memory time statistics exported to /sys/kernel/memory_state_time
 
@@ -648,6 +649,12 @@ config GPIO_TESTING_MODE
     default n
     help
       Enable driver for a simple testing mode detection
+
+config BOOTUP_RECLAIM
+    bool "bootup reclaim"
+    default n
+    help
+      reclaim global memory when bootup
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"

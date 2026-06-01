@@ -377,18 +377,15 @@ static int do_tmpfile(struct inode *dir, struct dentry *dentry,
 {
 	struct inode *inode;
 	struct ubifs_info *c = dir->i_sb->s_fs_info;
-	struct ubifs_budget_req req = { .new_ino = 1, .new_dent = 1,
-					.dirtied_ino = 1};
+	struct ubifs_budget_req req = { .new_ino = 1, .new_dent = 1};
 	struct ubifs_budget_req ino_req = { .dirtied_ino = 1 };
 	struct ubifs_inode *ui, *dir_ui = ubifs_inode(dir);
 	int err, instantiated = 0;
 	struct fscrypt_name nm;
 
 	/*
-	 * Budget request settings: new inode, new direntry, changing the
-	 * parent directory inode.
-	 * Allocate budget separately for new dirtied inode, the budget will
-	 * be released via writeback.
+	 * Budget request settings: new dirty inode, new direntry,
+	 * budget for dirtied inode will be released via writeback.
 	 */
 
 	dbg_gen("dent '%pd', mode %#hx in dir ino %lu",
@@ -449,7 +446,6 @@ static int do_tmpfile(struct inode *dir, struct dentry *dentry,
 	mutex_unlock(&dir_ui->ui_mutex);
 
 	ubifs_release_budget(c, &req);
-	fscrypt_free_filename(&nm);
 
 	return 0;
 
@@ -459,8 +455,6 @@ out_inode:
 	make_bad_inode(inode);
 	if (!instantiated)
 		iput(inode);
-	else if (whiteout)
-		iput(*whiteout);
 out_budg:
 	ubifs_release_budget(c, &req);
 	if (!instantiated)
@@ -740,7 +734,7 @@ static int ubifs_link(struct dentry *old_dentry, struct inode *dir,
 
 	if (ubifs_crypt_is_encrypted(dir) &&
 	    !fscrypt_has_permitted_context(dir, inode))
-		return -EXDEV;
+		return -EPERM;
 
 	err = fscrypt_setup_filename(dir, &dentry->d_name, 0, &nm);
 	if (err)
@@ -981,8 +975,7 @@ static int ubifs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 	struct ubifs_inode *dir_ui = ubifs_inode(dir);
 	struct ubifs_info *c = dir->i_sb->s_fs_info;
 	int err, sz_change;
-	struct ubifs_budget_req req = { .new_ino = 1, .new_dent = 1,
-					.dirtied_ino = 1};
+	struct ubifs_budget_req req = { .new_ino = 1, .new_dent = 1 };
 	struct fscrypt_name nm;
 
 	/*
@@ -1320,7 +1313,7 @@ static int do_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (old_dir != new_dir) {
 		if (ubifs_crypt_is_encrypted(new_dir) &&
 		    !fscrypt_has_permitted_context(new_dir, old_inode))
-			return -EXDEV;
+			return -EPERM;
 	}
 
 	if (unlink && is_dir) {
@@ -1371,10 +1364,7 @@ static int do_rename(struct inode *old_dir, struct dentry *old_dentry,
 			goto out_release;
 		}
 
-		spin_lock(&whiteout->i_lock);
 		whiteout->i_state |= I_LINKABLE;
-		spin_unlock(&whiteout->i_lock);
-
 		whiteout_ui = ubifs_inode(whiteout);
 		whiteout_ui->data = dev;
 		whiteout_ui->data_len = ubifs_encode_dev(dev, MKDEV(0, 0));
@@ -1413,9 +1403,6 @@ static int do_rename(struct inode *old_dir, struct dentry *old_dentry,
 			if (unlink)
 				drop_nlink(old_dir);
 		}
-
-		/* Add the old_dentry size to the old_dir size. */
-		old_sz -= CALC_DENT_SIZE(fname_len(&old_nm));
 	}
 
 	old_dir->i_size -= old_sz;
@@ -1462,17 +1449,15 @@ static int do_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 		err = ubifs_budget_space(c, &wht_req);
 		if (err) {
+			kfree(whiteout_ui->data);
+			whiteout_ui->data_len = 0;
 			iput(whiteout);
 			goto out_release;
 		}
 
 		inc_nlink(whiteout);
 		mark_inode_dirty(whiteout);
-
-		spin_lock(&whiteout->i_lock);
 		whiteout->i_state &= ~I_LINKABLE;
-		spin_unlock(&whiteout->i_lock);
-
 		iput(whiteout);
 	}
 
@@ -1550,7 +1535,7 @@ static int ubifs_xrename(struct inode *old_dir, struct dentry *old_dentry,
 	    (old_dir != new_dir) &&
 	    (!fscrypt_has_permitted_context(new_dir, fst_inode) ||
 	     !fscrypt_has_permitted_context(old_dir, snd_inode)))
-		return -EXDEV;
+		return -EPERM;
 
 	err = fscrypt_setup_filename(old_dir, &old_dentry->d_name, 0, &fst_nm);
 	if (err)
@@ -1561,10 +1546,6 @@ static int ubifs_xrename(struct inode *old_dir, struct dentry *old_dentry,
 		fscrypt_free_filename(&fst_nm);
 		return err;
 	}
-
-	err = ubifs_budget_space(c, &req);
-	if (err)
-		goto out;
 
 	lock_4_inodes(old_dir, new_dir, NULL, NULL);
 
@@ -1591,7 +1572,6 @@ static int ubifs_xrename(struct inode *old_dir, struct dentry *old_dentry,
 	unlock_4_inodes(old_dir, new_dir, NULL, NULL);
 	ubifs_release_budget(c, &req);
 
-out:
 	fscrypt_free_filename(&fst_nm);
 	fscrypt_free_filename(&snd_nm);
 	return err;

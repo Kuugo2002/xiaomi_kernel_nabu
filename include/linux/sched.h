@@ -353,12 +353,6 @@ struct sched_info {
 #endif /* CONFIG_SCHED_INFO */
 };
 
-static inline unsigned long map_util_freq(unsigned long util,
-					unsigned long freq, unsigned long cap)
-{
-	return (freq + (freq >> 2)) * util / cap;
-}
-
 /*
  * Integer metrics need fixed point arithmetic, e.g., sched/fair
  * has a few: load, load_avg, util_avg, freq, and capacity.
@@ -737,24 +731,6 @@ enum perf_event_task_context {
 
 struct wake_q_node {
 	struct wake_q_node *next;
-};
-
-/**
- * Implemented with reference to include/linux/sched
- * Tasks can also refer to individual threads and daemon kernels.
- * Some parameters may have dependencies.
- * 
- * @pid: takes the process id of the process.
- * @name: contains the full path (with name) of the process.
- */
-struct task_simply_struct {
-	pid_t				pid;
-	char				name[255];
-
-	/* Accumulated RSS usage: */
-	u64				acct_rss_mem1;
-	/* Accumulated virtual memory usage: */
-	u64				acct_vm_mem1;
 };
 
 struct task_struct {
@@ -1597,6 +1573,7 @@ extern struct pid *cad_pid;
 #define PF_MEMALLOC		0x00000800	/* Allocating memory */
 #define PF_NPROC_EXCEEDED	0x00001000	/* set_user() noticed that RLIMIT_NPROC was exceeded */
 #define PF_USED_MATH		0x00002000	/* If unset the fpu must be initialized before use */
+#define PF_USED_ASYNC		0x00004000	/* Used async_schedule*(), used by module init */
 #define PF_NOFREEZE		0x00008000	/* This thread should not be frozen */
 #define PF_FROZEN		0x00010000	/* Frozen for system suspend */
 #define PF_KSWAPD		0x00020000	/* I am kswapd */
@@ -1642,7 +1619,7 @@ extern struct pid *cad_pid;
 #define tsk_used_math(p)			((p)->flags & PF_USED_MATH)
 #define used_math()				tsk_used_math(current)
 
-static __always_inline bool is_percpu_thread(void)
+static inline bool is_percpu_thread(void)
 {
 #ifdef CONFIG_SMP
 	return (current->flags & PF_NO_SETAFFINITY) &&
@@ -1755,7 +1732,11 @@ extern int task_curr(const struct task_struct *p);
 extern int idle_cpu(int cpu);
 extern int sched_setscheduler(struct task_struct *, int, const struct sched_param *);
 extern int sched_setscheduler_nocheck(struct task_struct *, int, const struct sched_param *);
+extern int sched_set_fifo(struct task_struct *p);
+extern int sched_set_fifo_low(struct task_struct *p);
+extern int sched_set_normal(struct task_struct *p, int nice);
 extern int sched_setattr(struct task_struct *, const struct sched_attr *);
+extern int sched_setattr_nocheck(struct task_struct *, const struct sched_attr *);
 extern struct task_struct *idle_task(int cpu);
 
 /**

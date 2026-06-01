@@ -146,7 +146,7 @@ static void __dvb_frontend_free(struct dvb_frontend *fe)
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 
 	if (fepriv)
-		dvb_device_put(fepriv->dvbdev);
+		dvb_free_device(fepriv->dvbdev);
 
 	dvb_frontend_invoke_release(fe, fe->ops.release);
 
@@ -301,22 +301,14 @@ static int dvb_frontend_get_event(struct dvb_frontend *fe,
 	}
 
 	if (events->eventw == events->eventr) {
-		struct wait_queue_entry wait;
-		int ret = 0;
+		int ret;
 
 		if (flags & O_NONBLOCK)
 			return -EWOULDBLOCK;
 
-		init_waitqueue_entry(&wait, current);
-		add_wait_queue(&events->wait_queue, &wait);
-		while (!dvb_frontend_test_event(fepriv, events)) {
-			wait_woken(&wait, TASK_INTERRUPTIBLE, 0);
-			if (signal_pending(current)) {
-				ret = -ERESTARTSYS;
-				break;
-			}
-		}
-		remove_wait_queue(&events->wait_queue, &wait);
+		ret = wait_event_interruptible(events->wait_queue,
+					       dvb_frontend_test_event(fepriv, events));
+
 		if (ret < 0)
 			return ret;
 	}

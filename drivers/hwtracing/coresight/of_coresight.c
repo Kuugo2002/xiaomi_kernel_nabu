@@ -58,7 +58,6 @@ static void of_coresight_get_ports(const struct device_node *node,
 	struct device_node *ep = NULL;
 	int in = 0, out = 0;
 	struct device_node *ports = NULL, *port = NULL;
-	struct of_endpoint endpoint;
 
 	ports = of_get_child_by_name(node, "ports");
 	port = of_get_child_by_name(node, "port");
@@ -71,15 +70,10 @@ static void of_coresight_get_ports(const struct device_node *node,
 		if (!ep)
 			break;
 
-		if (of_graph_parse_endpoint(ep, &endpoint))
-			continue;
-
 		if (of_property_read_bool(ep, "slave-mode"))
-			in = (endpoint.port + 1 > in) ?
-				endpoint.port + 1 : in;
+			in++;
 		else
-			out = (endpoint.port + 1) > out ?
-				endpoint.port + 1 : out;
+			out++;
 
 	} while (ep);
 

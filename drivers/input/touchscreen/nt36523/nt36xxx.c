@@ -26,6 +26,8 @@
 #include <linux/debugfs.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
+#include <uapi/linux/sched/types.h>
+
 #if defined(CONFIG_FB)
 #ifdef CONFIG_DRM
 #include <drm/drm_notifier.h>
@@ -36,24 +38,17 @@
 #include <linux/earlysuspend.h>
 #endif
 
-
-
 #include "nt36xxx.h"
-#ifndef NVT_SAVE_TESTDATA_IN_FILE
-#include "nt36xxx_mp_ctrlram.h"
-#endif
 #if NVT_TOUCH_ESD_PROTECT
 #include <linux/jiffies.h>
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
-#if WAKEUP_GESTURE
-#ifdef CONFIG_TOUCHSCREEN_COMMON
-#include <linux/input/tp_common.h>
-#endif
-#endif
-
 
 #ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
 #include "../xiaomi/xiaomi_touch.h"
+#endif
+
+#if WAKEUP_GESTURE && defined(CONFIG_TOUCHSCREEN_COMMON)
+#include <linux/input/tp_common.h>
 #endif
 
 #if NVT_TOUCH_ESD_PROTECT
@@ -69,13 +64,7 @@ extern int32_t nvt_extra_proc_init(void);
 extern void nvt_extra_proc_deinit(void);
 #endif
 
-#if NVT_TOUCH_MP
-extern int32_t nvt_mp_proc_init(void);
-extern void nvt_mp_proc_deinit(void);
-#endif
-
 struct nvt_ts_data *ts;
-
 #if BOOT_UPDATE_FIRMWARE
 static struct workqueue_struct *nvt_fwu_wq;
 static struct workqueue_struct *nvt_lockdown_wq;
@@ -91,33 +80,6 @@ static int nvt_fb_notifier_callback(struct notifier_block *self, unsigned long e
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 static void nvt_ts_early_suspend(struct early_suspend *h);
 static void nvt_ts_late_resume(struct early_suspend *h);
-#endif
-
-#ifdef CONFIG_TOUCHSCREEN_COMMON
-static ssize_t double_tap_show(struct kobject *kobj,
-                               struct kobj_attribute *attr, char *buf)
-{
-    return sprintf(buf, "%d\n", ts->db_wakeup);
-}
-
-static ssize_t double_tap_store(struct kobject *kobj,
-                                struct kobj_attribute *attr, const char *buf,
-                                size_t count)
-{
-    int rc, val;
-
-    rc = kstrtoint(buf, 10, &val);
-    if (rc)
-    return -EINVAL;
-
-    ts->db_wakeup = !!val;
-    return count;
-}
-
-static struct tp_common_ops double_tap_ops = {
-    .show = double_tap_show,
-    .store = double_tap_store
-};
 #endif
 
 static int32_t nvt_ts_suspend(struct device *dev);
@@ -157,6 +119,57 @@ const uint16_t gesture_key_array[] = {
 	KEY_POWER,  //GESTURE_SLIDE_LEFT
 	KEY_POWER,  //GESTURE_SLIDE_RIGHT
 	KEY_WAKEUP,  //GESTURE_PEN_ONE_CLICK
+};
+
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+static ssize_t double_tap_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", ts->db_wakeup);
+}
+
+static ssize_t double_tap_store(struct kobject *kobj,
+				struct kobj_attribute *attr, const char *buf,
+				size_t count)
+{
+	int rc, val;
+
+	rc = kstrtoint(buf, 10, &val);
+	if (rc)
+		return -EINVAL;
+
+	ts->db_wakeup = !!val;
+	return count;
+}
+
+static struct tp_common_ops double_tap_ops = { .show = double_tap_show,
+					       .store = double_tap_store };
+#endif
+#endif
+
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+static ssize_t pen_update_show(struct kobject *kobj, struct kobj_attribute *attr,
+			char *buf)
+{
+	return sprintf(buf, "%d\n", ts->pen_update);
+}
+
+static ssize_t pen_update_store(struct kobject *kobj, struct kobj_attribute *attr,
+			 const char *buf, size_t count)
+{
+	int rc, val;
+
+	rc = kstrtoint(buf, 10, &val);
+	if (rc)
+		return -EINVAL;
+
+	ts->pen_update = !!val;
+	return count;
+}
+
+static struct tp_common_ops pen_update_ops = {
+	.show = pen_update_show,
+	.store = pen_update_store,
 };
 #endif
 
@@ -1138,7 +1151,7 @@ void nvt_ts_wakeup_gesture_report(uint8_t gesture_id, uint8_t *data)
 }
 #endif
 
-static void release_pen_event(void) {
+static void release_pen_event() {
 	if (ts && ts->pen_input_dev) {
 		input_report_abs(ts->pen_input_dev, ABS_X, 0);
 		input_report_abs(ts->pen_input_dev, ABS_Y, 0);
@@ -1661,6 +1674,14 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	uint32_t pen_btn1 = 0;
 	uint32_t pen_btn2 = 0;
 	uint32_t pen_battery = 0;
+
+	static struct task_struct *touch_task = NULL;
+	struct sched_param par = { .sched_priority = MAX_RT_PRIO - 1};
+
+	if (touch_task == NULL) {
+		touch_task = current;
+		sched_setscheduler_nocheck(touch_task, SCHED_FIFO, &par);
+	}
 
 #if WAKEUP_GESTURE
 	if (bTouchIsAwake == 0) {
@@ -2276,6 +2297,10 @@ static int disable_pen_input_device(bool disable) {
 	ts->pen_is_charge ? "ENABLE" : "DISABLE",
 	disable ? "DISABLE" : "ENABLE");
 
+#ifdef CONFIG_TOUCHSCREEN_NEW_PEN_CONNECT_STRATEGY
+	update_pen_connect_strategy_value(!disable);
+#endif //CONFIG_TOUCHSCREEN_NEW_PEN_CONNECT_STRATEGY
+
 nvt_set_pen_enable_out:
 	NVT_LOG("--\n");
 	return ret;
@@ -2294,6 +2319,38 @@ static void nvt_pen_charge_state_change_work(struct work_struct *work)
 	disable_pen_input_device(ts->pen_is_charge);
 }
 
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+static ssize_t pen_enable_show(struct kobject *kobj, struct kobj_attribute *attr,
+			char *buf)
+{
+	return sprintf(buf, "%d\n", ts->pen_input_dev_enable);
+}
+
+static ssize_t pen_enable_store(struct kobject *kobj, struct kobj_attribute *attr,
+			 const char *buf, size_t count)
+{
+	int rc, val;
+
+	rc = kstrtoint(buf, 10, &val);
+	if (rc)
+		return -EINVAL;
+
+	ts->pen_input_dev_enable = !!val;
+	// enable pen default update new_pen firmware
+	// pick-paper-code: 5049ac203: [nt36523]: enable pen use new_pen firmware
+	ts->pen_update = !!val;
+	disable_pen_input_device(!ts->pen_input_dev_enable);
+	release_pen_event();
+
+	return count;
+}
+
+static struct tp_common_ops pen_enable_ops = {
+	.show = pen_enable_show,
+	.store = pen_enable_store,
+};
+#endif
+
 static int nvt_set_cur_value(int nvt_mode, int nvt_value)
 {
 
@@ -2310,6 +2367,8 @@ static int nvt_set_cur_value(int nvt_mode, int nvt_value)
 		return 0;
 	} else if (nvt_mode == Touch_Pen_ENABLE && ts && nvt_value >= 0) {
 		ts->pen_input_dev_enable = !!nvt_value;
+		// enable pen default update new_pen firmware
+		ts->pen_update = !!nvt_value;
 		NVT_LOG("%s pen input dev", ts->pen_input_dev_enable ? "ENABLE" : "DISABLE");
 		disable_pen_input_device(!ts->pen_input_dev_enable);
 		release_pen_event();
@@ -2889,13 +2948,16 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #endif
 
 #if WAKEUP_GESTURE
-	input_set_capability(ts->input_dev, EV_KEY, KEY_WAKEUP);
-	#ifdef CONFIG_TOUCHSCREEN_COMMON
-    		ret = tp_common_set_double_tap_ops(&double_tap_ops);
-    		if (ret < 0) {
-       			 NVT_ERR("%s: Failed to create double_tap node err=%d\n",
-                	__func__, ret);
-    		}
+	for (retry = 0; retry < (sizeof(gesture_key_array) / sizeof(gesture_key_array[0])); retry++) {
+		input_set_capability(ts->input_dev, EV_KEY, gesture_key_array[retry]);
+	}
+
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+	ret = tp_common_set_double_tap_ops(&double_tap_ops);
+	if (ret < 0) {
+		NVT_ERR("%s: Failed to create double_tap node err=%d\n",
+			__func__, ret);
+	}
 #endif
 #endif
 
@@ -2930,8 +2992,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		ts->pen_input_dev->propbit[0] = BIT(INPUT_PROP_DIRECT);
 
 		if (ts->wgp_stylus) {
-			input_set_abs_params(ts->pen_input_dev, ABS_X, 0, ts->abs_x_max * 2 - 1, 0, 0);
-			input_set_abs_params(ts->pen_input_dev, ABS_Y, 0, ts->abs_y_max * 2 - 1, 0, 0);
+			input_set_abs_params(ts->pen_input_dev, ABS_X, 0, ts->abs_x_max * 8 - 1, 0, 0);
+			input_set_abs_params(ts->pen_input_dev, ABS_Y, 0, ts->abs_y_max * 8 - 1, 0, 0);
 		} else {
 			input_set_abs_params(ts->pen_input_dev, ABS_X, 0, ts->abs_x_max - 1, 0, 0);
 			input_set_abs_params(ts->pen_input_dev, ABS_Y, 0, ts->abs_y_max - 1, 0, 0);
@@ -2953,6 +3015,13 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 			NVT_ERR("register pen input device (%s) failed. ret=%d\n", ts->pen_input_dev->name, ret);
 			goto err_pen_input_register_device_failed;
 		}
+#ifdef CONFIG_TOUCHSCREEN_COMMON
+		ret = tp_common_set_pen_enable_ops(&pen_enable_ops);
+		ret = tp_common_set_pen_update_ops(&pen_update_ops);
+		if (ret < 0) {
+			NVT_ERR("Failed to create pen node err=%d\n", ret);
+		}
+#endif
 	} /* if (ts->pen_support) */
 
 	//---set int-pin & request irq---
@@ -3012,7 +3081,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
 	// please make sure boot update start after display reset(RESX) sequence
-	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(14000));
+	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(100));
 #endif
 
 	NVT_LOG("NVT_TOUCH_ESD_PROTECT is %d\n", NVT_TOUCH_ESD_PROTECT);
@@ -3045,26 +3114,10 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 #endif
 
-#if NVT_TOUCH_MP
-	ret = nvt_mp_proc_init();
-	if (ret != 0) {
-		NVT_ERR("nvt mp proc init failed. ret=%d\n", ret);
-		goto err_mp_proc_init_failed;
-	}
-#endif
-
-#ifndef NVT_SAVE_TESTDATA_IN_FILE
-	ret = nvt_test_data_proc_init(ts->client);
-	if (ret < 0) {
-		NVT_ERR("nvt test data interface init failed. ret=%d\n", ret);
-		goto err_mp_proc_init_failed;
-	}
-#endif
-
 	attrs_p = (struct attribute_group *)devm_kzalloc(&client->dev, sizeof(*attrs_p), GFP_KERNEL);
 	if (!attrs_p) {
 		NVT_ERR("no mem to alloc");
-		goto err_mp_proc_init_failed;
+		goto err_alloc_failed;
 	}
 	ts->attrs = attrs_p;
 	attrs_p->name = "panel_info";
@@ -3076,7 +3129,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	if (!ts->event_wq) {
 		NVT_ERR("Can not create work thread for suspend/resume!!");
 		ret = -ENOMEM;
-		goto err_alloc_work_thread_failed;
+		goto err_alloc_failed;
 	}
 	INIT_WORK(&ts->resume_work, nvt_resume_work);
 	INIT_WORK(&ts->suspend_work, nvt_suspend_work);
@@ -3170,14 +3223,7 @@ err_register_pen_charge_state_failed:
 	destroy_workqueue(ts->set_touchfeature_wq);
 err_create_set_touchfeature_work_queue:
 	destroy_workqueue(ts->event_wq);
-err_alloc_work_thread_failed:
-#ifndef NVT_SAVE_TESTDATA_IN_FILE
-	nvt_test_data_proc_deinit();
-#endif
-#if NVT_TOUCH_MP
-	nvt_mp_proc_deinit();
-err_mp_proc_init_failed:
-#endif
+err_alloc_failed:
 #if NVT_TOUCH_EXT_PROC
 	nvt_extra_proc_deinit();
 err_extra_proc_init_failed:
@@ -3283,10 +3329,6 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 
 if (pen_charge_state_notifier_unregister_client(&ts->pen_charge_state_notifier))
 		NVT_ERR("Error occurred while unregistering pen charge state notifier.\n");
-
-#if NVT_TOUCH_MP
-	nvt_mp_proc_deinit();
-#endif
 #if NVT_TOUCH_EXT_PROC
 	nvt_extra_proc_deinit();
 #endif
@@ -3369,10 +3411,6 @@ static void nvt_ts_shutdown(struct spi_device *client)
 	destroy_workqueue(ts->event_wq);
 	if (pen_charge_state_notifier_unregister_client(&ts->pen_charge_state_notifier))
 			NVT_ERR("Error occurred while unregistering pen charge state notifier.\n");
-
-#if NVT_TOUCH_MP
-	nvt_mp_proc_deinit();
-#endif
 #if NVT_TOUCH_EXT_PROC
 	nvt_extra_proc_deinit();
 #endif

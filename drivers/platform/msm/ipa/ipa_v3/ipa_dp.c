@@ -804,17 +804,14 @@ static int ipa3_rx_switch_to_intr_mode(struct ipa3_sys_context *sys)
 
 	atomic_set(&sys->curr_polling_state, 0);
 	__ipa3_update_curr_poll_state(sys->ep->client, 0);
-#ifdef IPA_WAKELOCKS
+
 	ipa3_dec_release_wakelock();
-#endif
 	ret = gsi_config_channel_mode(sys->ep->gsi_chan_hdl,
 		GSI_CHAN_MODE_CALLBACK);
 	if ((ret != GSI_STATUS_SUCCESS) &&
 		!atomic_read(&sys->curr_polling_state)) {
 		if (ret == -GSI_STATUS_PENDING_IRQ) {
-		#ifdef IPA_WAKELOCKS
 			ipa3_inc_acquire_wakelock();
-		#endif
 			atomic_set(&sys->curr_polling_state, 1);
 			__ipa3_update_curr_poll_state(sys->ep->client, 1);
 		} else {
@@ -1267,12 +1264,10 @@ fail_repl:
 	ep->sys->repl_hdlr = ipa3_replenish_rx_cache;
 	ep->sys->repl->capacity = 0;
 	kfree(ep->sys->repl);
-	ep->sys->repl = NULL;
 fail_page_recycle_repl:
 	if (ep->sys->page_recycle_repl) {
 		ep->sys->page_recycle_repl->capacity = 0;
 		kfree(ep->sys->page_recycle_repl);
-		ep->sys->page_recycle_repl = NULL;
 	}
 fail_gen2:
 	if (ipa3_ctx->use_ipa_pm)
@@ -2659,7 +2654,6 @@ static void ipa3_cleanup_rx(struct ipa3_sys_context *sys)
 
 		kfree(sys->repl->cache);
 		kfree(sys->repl);
-		sys->repl = NULL;
 	}
 	if (sys->page_recycle_repl) {
 		for (i = 0; i < sys->page_recycle_repl->capacity; i++) {
@@ -2678,7 +2672,6 @@ static void ipa3_cleanup_rx(struct ipa3_sys_context *sys)
 		}
 		kfree(sys->page_recycle_repl->cache);
 		kfree(sys->page_recycle_repl);
-		sys->page_recycle_repl = NULL;
 	}
 }
 
@@ -3902,9 +3895,8 @@ static int ipa3_assign_policy(struct ipa_sys_connect_params *in,
 			 * Dont enable ipa_status for APQ, since MDM IPA
 			 * has IPA >= 4.5 with DPLv3.
 			 */
-			if ((ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ &&
-				ipa3_is_mhip_offload_enabled()) ||
-				(ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5))
+			if (ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ &&
+				ipa3_is_mhip_offload_enabled())
 				sys->ep->status.status_en = false;
 			else
 				sys->ep->status.status_en = true;
@@ -4358,9 +4350,8 @@ void __ipa_gsi_irq_rx_scedule_poll(struct ipa3_sys_context *sys)
 
 	atomic_set(&sys->curr_polling_state, 1);
 	__ipa3_update_curr_poll_state(sys->ep->client, 1);
-#ifdef IPA_WAKELOCKS
+
 	ipa3_inc_acquire_wakelock();
-#endif
 
 	/*
 	 * pm deactivate is done in wq context
@@ -4449,9 +4440,7 @@ static void ipa_dma_gsi_irq_rx_notify_cb(struct gsi_chan_xfer_notify *notify)
 			/* put the gsi channel into polling mode */
 			gsi_config_channel_mode(sys->ep->gsi_chan_hdl,
 				GSI_CHAN_MODE_POLL);
-		#ifdef IPA_WAKELOCKS
 			ipa3_inc_acquire_wakelock();
-		#endif
 			atomic_set(&sys->curr_polling_state, 1);
 			queue_work(sys->wq, &sys->work);
 		}

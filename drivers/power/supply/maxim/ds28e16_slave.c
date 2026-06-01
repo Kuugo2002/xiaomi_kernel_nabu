@@ -618,9 +618,9 @@ int DS28E16_cmd_device_disable_slave(int op, unsigned char *password)
 /// 'Compute and Read Page Authentication' command
 ///
 /// @param[in] anon - boolean parameter
-/// @param[in] pg - Page number   2,ï¿½ï¿½ï¿½? 0,page0; 1,page1;
+/// @param[in] pg - Page number   2,¿¿¿? 0,page0; 1,page1;
 /// @param[in] challenge_slave
-/// @param[out] hmac   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?2ï¿½ï¿½ï¿½?///
+/// @param[out] hmac   ¿¿¿¿¿¿¿?2¿¿¿?///
 /// @return
 /// DS_TRUE - command successful @n
 /// DS_FALSE - command failed
@@ -696,8 +696,8 @@ unsigned char *challenge_slave, unsigned char *hmac)
 ///
 /// @param[in] anon - boolean parameter
 /// @param[in] bdconst - boolean parameter
-/// @param[in] pg - Page number   ï¿½ï¿½
-/// @param[in] partial secret   32ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+/// @param[in] pg - Page number   ¿¿
+/// @param[in] partial secret   32¿¿¿¿¿¿
 ///
 /// @return
 /// DS_TRUE - command successful @n
@@ -1090,9 +1090,6 @@ static int verify_get_property(struct power_supply *psy, enum power_supply_prope
 {
 	int ret;
 	unsigned char buf[50];
-
-	if (psp == 4 || psp == 67)
-		return 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_VERIFY_MODEL_NAME:

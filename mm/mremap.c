@@ -193,52 +193,6 @@ static void move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 
 #define LATENCY_LIMIT	(64 * PAGE_SIZE)
 
-#ifdef CONFIG_HAVE_MOVE_PMD
-static bool move_normal_pmd(struct vm_area_struct *vma, unsigned long old_addr,
-		  unsigned long new_addr, unsigned long old_end,
-		  pmd_t *old_pmd, pmd_t *new_pmd)
-{
-	spinlock_t *old_ptl, *new_ptl;
-	struct mm_struct *mm = vma->vm_mm;
-	pmd_t pmd;
-
-	if ((old_addr & ~PMD_MASK) || (new_addr & ~PMD_MASK)
-	    || old_end - old_addr < PMD_SIZE)
-		return false;
-
-	/*
-	 * The destination pmd shouldn't be established, free_pgtables()
-	 * should have release it.
-	 */
-	if (WARN_ON(!pmd_none(*new_pmd)))
-		return false;
-
-	/*
-	 * We don't have to worry about the ordering of src and dst
-	 * ptlocks because exclusive mmap_sem prevents deadlock.
-	 */
-	old_ptl = pmd_lock(vma->vm_mm, old_pmd);
-	new_ptl = pmd_lockptr(mm, new_pmd);
-	if (new_ptl != old_ptl)
-		spin_lock_nested(new_ptl, SINGLE_DEPTH_NESTING);
-
-	/* Clear the pmd */
-	pmd = *old_pmd;
-	pmd_clear(old_pmd);
-
-	VM_BUG_ON(!pmd_none(*new_pmd));
-
-	/* Set the new pmd */
-	set_pmd_at(mm, new_addr, new_pmd, pmd);
-	flush_tlb_range(vma, old_addr, old_addr + PMD_SIZE);
-	if (new_ptl != old_ptl)
-		spin_unlock(new_ptl);
-	spin_unlock(old_ptl);
-
-	return true;
-}
-#endif
-
 unsigned long move_page_tables(struct vm_area_struct *vma,
 		unsigned long old_addr, struct vm_area_struct *new_vma,
 		unsigned long new_addr, unsigned long len,
@@ -248,9 +202,6 @@ unsigned long move_page_tables(struct vm_area_struct *vma,
 	pmd_t *old_pmd, *new_pmd;
 	unsigned long mmun_start;	/* For mmu_notifiers */
 	unsigned long mmun_end;		/* For mmu_notifiers */
-
-	if (!len)
-		return 0;
 
 	old_end = old_addr + len;
 	flush_cache_range(vma, old_addr, old_end);
@@ -272,7 +223,7 @@ unsigned long move_page_tables(struct vm_area_struct *vma,
 		new_pmd = alloc_new_pmd(vma->vm_mm, vma, new_addr);
 		if (!new_pmd)
 			break;
-		if (is_swap_pmd(*old_pmd) || pmd_trans_huge(*old_pmd) || pmd_devmap(*old_pmd)) {
+		if (is_swap_pmd(*old_pmd) || pmd_trans_huge(*old_pmd)) {
 			if (extent == HPAGE_PMD_SIZE) {
 				bool moved;
 				/* See comment in move_ptes() */
@@ -288,25 +239,7 @@ unsigned long move_page_tables(struct vm_area_struct *vma,
 			split_huge_pmd(vma, old_pmd, old_addr);
 			if (pmd_trans_unstable(old_pmd))
 				continue;
-		} else if (extent == PMD_SIZE) {
-#ifdef CONFIG_HAVE_MOVE_PMD
-			/*
-			 * If the extent is PMD-sized, try to speed the move by
-			 * moving at the PMD level if possible.
-			 */
-			bool moved;
-
-			if (need_rmap_locks)
-				take_rmap_locks(vma);
-			moved = move_normal_pmd(vma, old_addr, new_addr,
-					old_end, old_pmd, new_pmd);
-			if (need_rmap_locks)
-				drop_rmap_locks(vma);
-			if (moved)
-				continue;
-#endif
 		}
-
 		if (pte_alloc(new_vma->vm_mm, new_pmd, new_addr))
 			break;
 		next = (new_addr + PMD_SIZE) & PMD_MASK;
@@ -537,23 +470,6 @@ static unsigned long mremap_to(unsigned long addr, unsigned long old_len,
 	/* Ensure the old/new locations do not overlap */
 	if (addr + old_len > new_addr && new_addr + new_len > addr)
 		goto out;
-
-	/*
-	 * move_vma() need us to stay 4 maps below the threshold, otherwise
-	 * it will bail out at the very beginning.
-	 * That is a problem if we have already unmaped the regions here
-	 * (new_addr, and old_addr), because userspace will not know the
-	 * state of the vma's after it gets -ENOMEM.
-	 * So, to avoid such scenario we can pre-compute if the whole
-	 * operation has high chances to success map-wise.
-	 * Worst-scenario case is when both vma's (new_addr and old_addr) get
-	 * split in 3 before unmaping it.
-	 * That means 2 more maps (1 for each) to the ones we already hold.
-	 * Check whether current map count plus 2 still leads us to 4 maps below
-	 * the threshold, otherwise return -ENOMEM here to be more safe.
-	 */
-	if ((mm->map_count + 2) >= sysctl_max_map_count - 3)
-		return -ENOMEM;
 
 	ret = do_munmap(mm, new_addr, new_len, uf_unmap_early);
 	if (ret)

@@ -798,12 +798,6 @@ static int ioctl_standard_iw_point(struct iw_point *iwp, unsigned int cmd,
 		}
 	}
 
-	/* Sanity-check to ensure we never end up _allocating_ zero
-	 * bytes of data for extra.
-	 */
-	if (extra_size <= 0)
-		return -EFAULT;
-
 	/* kzalloc() ensures NULL-termination for essid_compat. */
 	extra = kzalloc(extra_size, GFP_KERNEL);
 	if (!extra)
@@ -904,9 +898,8 @@ out:
 int call_commit_handler(struct net_device *dev)
 {
 #ifdef CONFIG_WIRELESS_EXT
-	if (netif_running(dev) &&
-	    dev->wireless_handlers &&
-	    dev->wireless_handlers->standard[0])
+	if ((netif_running(dev)) &&
+	   (dev->wireless_handlers->standard[0] != NULL))
 		/* Call the commit handler on the driver */
 		return dev->wireless_handlers->standard[0](dev, NULL,
 							   NULL, NULL);

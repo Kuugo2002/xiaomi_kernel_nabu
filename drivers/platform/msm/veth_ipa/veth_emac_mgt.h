@@ -20,8 +20,7 @@
 
 
 int veth_emac_init(struct veth_emac_export_mem *veth_emac_mem,
-					struct veth_ipa_dev *pdata,
-					bool smmu_s2_enb);
+				   struct veth_ipa_dev *pdata);
 
 int veth_alloc_emac_export_mem(struct veth_emac_export_mem *veth_emac_mem,
 	struct veth_ipa_dev *pdata);
@@ -41,16 +40,6 @@ int veth_emac_open_notify(struct veth_emac_export_mem *veth_emac_mem,
 					struct veth_ipa_dev *pdata);
 int veth_emac_ipa_setup_complete(struct veth_emac_export_mem *veth_emac_mem,
 					struct veth_ipa_dev *pdata);
-int emac_ipa_hab_export_tx_buf_pool(int vc_id,
-				struct veth_emac_export_mem *veth_emac_mem,
-				struct veth_ipa_dev *pdata);
-int emac_ipa_hab_export_rx_buf_pool(int vc_id,
-				struct veth_emac_export_mem *veth_emac_mem,
-				struct veth_ipa_dev *pdata);
-int veth_emac_ipa_send_exp_id(int vc_id,
-				struct veth_emac_export_mem *veth_emac_mem);
-
-
 
 
 #endif /* _VETH_EMAC_MGT_H_ */

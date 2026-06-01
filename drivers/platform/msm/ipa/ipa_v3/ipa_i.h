@@ -469,8 +469,6 @@ enum {
 
 #define MBOX_TOUT_MS 100
 
-#define IPA_RULE_CNT_MAX 512
-
 struct ipa3_active_client_htable_entry {
 	struct hlist_node list;
 	char id_string[IPA3_ACTIVE_CLIENTS_LOG_NAME_LEN];
@@ -1424,12 +1422,10 @@ struct ipa3_active_clients {
 	int bus_vote_idx;
 };
 
-#ifdef IPA_WAKELOCKS
 struct ipa3_wakelock_ref_cnt {
 	spinlock_t spinlock;
 	int cnt;
 };
-#endif
 
 struct ipa3_tag_completion {
 	struct completion comp;
@@ -1777,7 +1773,6 @@ struct ipa3_app_clock_vote {
  * @rt_rule_cache: routing rule cache
  * @hdr_cache: header cache
  * @hdr_offset_cache: header offset cache
- * @fnr_stats_cache: FnR stats cache
  * @hdr_proc_ctx_cache: processing context cache
  * @hdr_proc_ctx_offset_cache: processing context offset cache
  * @rt_tbl_cache: routing table cache
@@ -1873,7 +1868,6 @@ struct ipa3_context {
 	struct kmem_cache *rt_rule_cache;
 	struct kmem_cache *hdr_cache;
 	struct kmem_cache *hdr_offset_cache;
-	struct kmem_cache *fnr_stats_cache;
 	struct kmem_cache *hdr_proc_ctx_cache;
 	struct kmem_cache *hdr_proc_ctx_offset_cache;
 	struct kmem_cache *rt_tbl_cache;
@@ -1976,10 +1970,8 @@ struct ipa3_context {
 	bool gsi_ch20_wa;
 	bool s1_bypass_arr[IPA_SMMU_CB_MAX];
 	u32 wdi_map_cnt;
-#ifdef IPA_WAKELOCKS
 	struct wakeup_source w_lock;
 	struct ipa3_wakelock_ref_cnt wakelock_ref_cnt;
-#endif
 	/* RMNET_IOCTL_INGRESS_FORMAT_AGG_DATA */
 	bool ipa_client_apps_wan_cons_agg_gro;
 	/* M-release support to know client pipes */

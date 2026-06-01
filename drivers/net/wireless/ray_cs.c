@@ -283,14 +283,13 @@ static int ray_probe(struct pcmcia_device *p_dev)
 {
 	ray_dev_t *local;
 	struct net_device *dev;
-	int ret;
 
 	dev_dbg(&p_dev->dev, "ray_attach()\n");
 
 	/* Allocate space for private device-specific data */
 	dev = alloc_etherdev(sizeof(ray_dev_t));
 	if (!dev)
-		return -ENOMEM;
+		goto fail_alloc_dev;
 
 	local = netdev_priv(dev);
 	local->finder = p_dev;
@@ -327,16 +326,11 @@ static int ray_probe(struct pcmcia_device *p_dev)
 	init_timer(&local->timer);
 
 	this_device = p_dev;
-	ret = ray_config(p_dev);
-	if (ret)
-		goto err_free_dev;
+	return ray_config(p_dev);
 
-	return 0;
-
-err_free_dev:
-	free_netdev(dev);
-	return ret;
-}
+fail_alloc_dev:
+	return -ENOMEM;
+} /* ray_attach */
 
 static void ray_detach(struct pcmcia_device *link)
 {
@@ -401,8 +395,6 @@ static int ray_config(struct pcmcia_device *link)
 		goto failed;
 	local->sram = ioremap(link->resource[2]->start,
 			resource_size(link->resource[2]));
-	if (!local->sram)
-		goto failed;
 
 /*** Set up 16k window for shared memory (receive buffer) ***************/
 	link->resource[3]->flags |=
@@ -417,8 +409,6 @@ static int ray_config(struct pcmcia_device *link)
 		goto failed;
 	local->rmem = ioremap(link->resource[3]->start,
 			resource_size(link->resource[3]));
-	if (!local->rmem)
-		goto failed;
 
 /*** Set up window for attribute memory ***********************************/
 	link->resource[4]->flags |=
@@ -433,8 +423,6 @@ static int ray_config(struct pcmcia_device *link)
 		goto failed;
 	local->amem = ioremap(link->resource[4]->start,
 			resource_size(link->resource[4]));
-	if (!local->amem)
-		goto failed;
 
 	dev_dbg(&link->dev, "ray_config sram=%p\n", local->sram);
 	dev_dbg(&link->dev, "ray_config rmem=%p\n", local->rmem);

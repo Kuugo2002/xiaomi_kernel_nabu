@@ -19,7 +19,6 @@
 #define SCHED_CPUFREQ_CONTINUE (1U << 8)
 
 #define SCHED_CPUFREQ_RT_DL	(SCHED_CPUFREQ_RT | SCHED_CPUFREQ_DL)
-#define SCHED_CPUFREQ_BOOST_UPDATE	(1U << 9)
 
 #ifdef CONFIG_CPU_FREQ
 struct update_util_data {

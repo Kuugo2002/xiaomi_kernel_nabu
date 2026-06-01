@@ -424,6 +424,7 @@ static int radeon_pmops_runtime_suspend(struct device *dev)
 
 	drm_dev->switch_power_state = DRM_SWITCH_POWER_CHANGING;
 	drm_kms_helper_poll_disable(drm_dev);
+	vga_switcheroo_set_dynamic_switch(pdev, VGA_SWITCHEROO_OFF);
 
 	ret = radeon_suspend_kms(drm_dev, false, false, false);
 	pci_save_state(pdev);
@@ -460,6 +461,7 @@ static int radeon_pmops_runtime_resume(struct device *dev)
 
 	ret = radeon_resume_kms(drm_dev, false, false);
 	drm_kms_helper_poll_enable(drm_dev);
+	vga_switcheroo_set_dynamic_switch(pdev, VGA_SWITCHEROO_ON);
 	drm_dev->switch_power_state = DRM_SWITCH_POWER_ON;
 	return 0;
 }
@@ -496,10 +498,8 @@ long radeon_drm_ioctl(struct file *filp,
 	long ret;
 	dev = file_priv->minor->dev;
 	ret = pm_runtime_get_sync(dev->dev);
-	if (ret < 0) {
-		pm_runtime_put_autosuspend(dev->dev);
+	if (ret < 0)
 		return ret;
-	}
 
 	ret = drm_ioctl(filp, cmd, arg);
 	

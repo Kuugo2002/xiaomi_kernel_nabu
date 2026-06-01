@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -156,9 +156,7 @@ struct ipa_pm_client {
 	struct work_struct activate_work;
 	struct delayed_work deactivate_work;
 	struct completion complete;
-#ifdef IPA_WAKELOCKS
 	struct wakeup_source wlock;
-#endif
 };
 
 /*
@@ -409,10 +407,8 @@ static void activate_work_func(struct work_struct *work)
 	client = container_of(work, struct ipa_pm_client, activate_work);
 	if (!client->skip_clk_vote) {
 		IPA_ACTIVE_CLIENTS_INC_SPECIAL(client->name);
-#ifdef IPA_WAKELOCKS
 		if (client->group == IPA_PM_GROUP_APPS)
 			__pm_stay_awake(&client->wlock);
-#endif
 	}
 
 	spin_lock_irqsave(&client->state_lock, flags);
@@ -433,10 +429,8 @@ static void activate_work_func(struct work_struct *work)
 	if (dec_clk) {
 		if (!client->skip_clk_vote) {
 			IPA_ACTIVE_CLIENTS_DEC_SPECIAL(client->name);
-#ifdef IPA_WAKELOCKS
 			if (client->group == IPA_PM_GROUP_APPS)
 				__pm_relax(&client->wlock);
-#endif
 		}
 
 		IPA_PM_DBG_STATE(client->hdl, client->name, client->state);
@@ -494,10 +488,8 @@ static void delayed_deferred_deactivate_work_func(struct work_struct *work)
 		spin_unlock_irqrestore(&client->state_lock, flags);
 		if (!client->skip_clk_vote) {
 			IPA_ACTIVE_CLIENTS_DEC_SPECIAL(client->name);
-#ifdef IPA_WAKELOCKS
 			if (client->group == IPA_PM_GROUP_APPS)
 				__pm_relax(&client->wlock);
-#endif
 		}
 
 		deactivate_client(client->hdl);
@@ -645,7 +637,6 @@ int ipa_pm_init(struct ipa_pm_init_params *params)
 	if (!ipa_pm_ctx->wq) {
 		IPA_PM_ERR("create workqueue failed\n");
 		kfree(ipa_pm_ctx);
-		ipa_pm_ctx = NULL;
 		return -ENOMEM;
 	}
 
@@ -722,9 +713,7 @@ int ipa_pm_destroy(void)
 int ipa_pm_register(struct ipa_pm_register_params *params, u32 *hdl)
 {
 	struct ipa_pm_client *client;
-#ifdef IPA_WAKELOCKS
 	struct wakeup_source *wlock;
-#endif
 
 	if (ipa_pm_ctx == NULL) {
 		IPA_PM_ERR("PM_ctx is null\n");
@@ -773,10 +762,8 @@ int ipa_pm_register(struct ipa_pm_register_params *params, u32 *hdl)
 	client->group = params->group;
 	client->hdl = *hdl;
 	client->skip_clk_vote = params->skip_clk_vote;
-#ifdef IPA_WAKELOCKS
 	wlock = &client->wlock;
 	wakeup_source_init(wlock, client->name);
-#endif
 
 	init_completion(&client->complete);
 
@@ -842,9 +829,7 @@ int ipa_pm_deregister(u32 hdl)
 		if (ipa_pm_ctx->clients_by_pipe[i] == ipa_pm_ctx->clients[hdl])
 			ipa_pm_ctx->clients_by_pipe[i] = NULL;
 	}
-#ifdef IPA_WAKELOCKS
 	wakeup_source_trash(&client->wlock);
-#endif
 	kfree(client);
 	ipa_pm_ctx->clients[hdl] = NULL;
 
@@ -962,10 +947,8 @@ static int ipa_pm_activate_helper(struct ipa_pm_client *client, bool sync)
 	/* we got the clocks */
 	if (result == 0) {
 		client->state = IPA_PM_ACTIVATED;
-#ifdef IPA_WAKELOCKS
 		if (client->group == IPA_PM_GROUP_APPS)
 			__pm_stay_awake(&client->wlock);
-#endif
 		spin_unlock_irqrestore(&client->state_lock, flags);
 		activate_client(client->hdl);
 		if (sync)
@@ -1142,10 +1125,8 @@ int ipa_pm_deactivate_all_deferred(void)
 			spin_unlock_irqrestore(&client->state_lock, flags);
 			if (!client->skip_clk_vote) {
 				IPA_ACTIVE_CLIENTS_DEC_SPECIAL(client->name);
-#ifdef IPA_WAKELOCKS
 				if (client->group == IPA_PM_GROUP_APPS)
 					__pm_relax(&client->wlock);
-#endif
 			}
 			deactivate_client(client->hdl);
 		} else /* if activated or deactivated, we do nothing */
@@ -1199,10 +1180,8 @@ int ipa_pm_deactivate_sync(u32 hdl)
 	/* else case (Deactivates all Activated cases)*/
 	if (!client->skip_clk_vote) {
 		IPA_ACTIVE_CLIENTS_DEC_SPECIAL(client->name);
-#ifdef IPA_WAKELOCKS
 		if (client->group == IPA_PM_GROUP_APPS)
 			__pm_relax(&client->wlock);
-#endif
 	}
 
 	spin_lock_irqsave(&client->state_lock, flags);
@@ -1275,15 +1254,14 @@ int ipa_pm_set_throughput(u32 hdl, int throughput)
 		return -EINVAL;
 	}
 
-	mutex_lock(&ipa_pm_ctx->client_mutex);
 	if (hdl >= IPA_PM_MAX_CLIENTS || ipa_pm_ctx->clients[hdl] == NULL
 		|| throughput < 0) {
 		IPA_PM_ERR("Invalid Params\n");
-		mutex_unlock(&ipa_pm_ctx->client_mutex);
 		return -EINVAL;
 	}
 	client = ipa_pm_ctx->clients[hdl];
 
+	mutex_lock(&ipa_pm_ctx->client_mutex);
 	if (client->group == IPA_PM_GROUP_DEFAULT)
 		IPA_PM_DBG_LOW("Old throughput: %d\n",  client->throughput);
 	else
@@ -1302,16 +1280,14 @@ int ipa_pm_set_throughput(u32 hdl, int throughput)
 			client->group, ipa_pm_ctx->group_tput[client->group]);
 	mutex_unlock(&ipa_pm_ctx->client_mutex);
 
-	if (ipa_pm_ctx->clients[hdl]) {
-		spin_lock_irqsave(&client->state_lock, flags);
-		if (IPA_PM_STATE_ACTIVE(client->state) || (client->group !=
+	spin_lock_irqsave(&client->state_lock, flags);
+	if (IPA_PM_STATE_ACTIVE(client->state) || (client->group !=
 			IPA_PM_GROUP_DEFAULT)) {
-			spin_unlock_irqrestore(&client->state_lock, flags);
-			do_clk_scaling();
-			return 0;
-		}
 		spin_unlock_irqrestore(&client->state_lock, flags);
+		do_clk_scaling();
+		return 0;
 	}
+	spin_unlock_irqrestore(&client->state_lock, flags);
 
 	return 0;
 }

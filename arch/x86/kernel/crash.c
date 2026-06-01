@@ -23,7 +23,6 @@
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
-#include <linux/overflow.h>
 
 #include <asm/processor.h>
 #include <asm/hardirq.h>
@@ -36,6 +35,7 @@
 #include <linux/kdebug.h>
 #include <asm/cpu.h>
 #include <asm/reboot.h>
+#include <asm/virtext.h>
 #include <asm/intel_pt.h>
 
 /* Alignment required for elf header segment */
@@ -117,6 +117,15 @@ static void kdump_nmi_callback(int cpu, struct pt_regs *regs)
 	 */
 	cpu_crash_vmclear_loaded_vmcss();
 
+	/* Disable VMX or SVM if needed.
+	 *
+	 * We need to disable virtualization on all CPUs.
+	 * Having VMX or SVM enabled on any CPU may break rebooting
+	 * after the kdump kernel has finished its task.
+	 */
+	cpu_emergency_vmxoff();
+	cpu_emergency_svm_disable();
+
 	/*
 	 * Disable Intel PT to stop its logging
 	 */
@@ -175,7 +184,12 @@ void native_machine_crash_shutdown(struct pt_regs *regs)
 	 */
 	cpu_crash_vmclear_loaded_vmcss();
 
-	cpu_emergency_disable_virtualization();
+	/* Booting kdump kernel with VMX or SVM enabled won't work,
+	 * because (among other limitations) we can't disable paging
+	 * with the virt flags.
+	 */
+	cpu_emergency_vmxoff();
+	cpu_emergency_svm_disable();
 
 	/*
 	 * Disable Intel PT to stop its logging
@@ -551,7 +565,7 @@ int crash_setup_memmap_entries(struct kimage *image, struct boot_params *params)
 	struct crash_memmap_data cmd;
 	struct crash_mem *cmem;
 
-	cmem = vzalloc(struct_size(cmem, ranges, 1));
+	cmem = vzalloc(sizeof(struct crash_mem));
 	if (!cmem)
 		return -ENOMEM;
 

@@ -133,7 +133,10 @@ SYSCALL_DEFINE5(add_key, const char __user *, _type,
 
 	key_ref_put(keyring_ref);
  error3:
-	kvfree_sensitive(payload, plen);
+	if (payload) {
+		memzero_explicit(payload, plen);
+		kvfree(payload);
+	}
  error2:
 	kfree(description);
  error:
@@ -348,7 +351,7 @@ long keyctl_update_key(key_serial_t id,
 
 	key_ref_put(key_ref);
 error2:
-	kvfree_sensitive(payload, plen);
+	__kvzfree(payload, plen);
 error:
 	return ret;
 }
@@ -856,7 +859,7 @@ can_read_key:
 		 */
 		if (ret > key_data_len) {
 			if (unlikely(key_data))
-				kvfree_sensitive(key_data, key_data_len);
+				__kvzfree(key_data, key_data_len);
 			key_data_len = ret;
 			continue;	/* Allocate buffer */
 		}
@@ -865,7 +868,7 @@ can_read_key:
 			ret = -EFAULT;
 		break;
 	}
-	kvfree_sensitive(key_data, key_data_len);
+	__kvzfree(key_data, key_data_len);
 
 key_put_out:
 	key_put(key);
@@ -922,19 +925,14 @@ long keyctl_chown_key(key_serial_t id, uid_t user, gid_t group)
 	ret = -EACCES;
 	down_write(&key->sem);
 
-	{
-		bool is_privileged_op = false;
-
+	if (!capable(CAP_SYS_ADMIN)) {
 		/* only the sysadmin can chown a key to some other UID */
 		if (user != (uid_t) -1 && !uid_eq(key->uid, uid))
-			is_privileged_op = true;
+			goto error_put;
 
 		/* only the sysadmin can set the key's GID to a group other
 		 * than one of those that the current process subscribes to */
 		if (group != (gid_t) -1 && !gid_eq(gid, key->gid) && !in_group_p(gid))
-			is_privileged_op = true;
-
-		if (is_privileged_op && !capable(CAP_SYS_ADMIN))
 			goto error_put;
 	}
 
@@ -1034,7 +1032,7 @@ long keyctl_setperm_key(key_serial_t id, key_perm_t perm)
 	down_write(&key->sem);
 
 	/* if we're not the sysadmin, we can only change a key that we own */
-	if (uid_eq(key->uid, current_fsuid()) || capable(CAP_SYS_ADMIN)) {
+	if (capable(CAP_SYS_ADMIN) || uid_eq(key->uid, current_fsuid())) {
 		key->perm = perm;
 		ret = 0;
 	}
@@ -1172,7 +1170,10 @@ long keyctl_instantiate_key_common(key_serial_t id,
 		keyctl_change_reqkey_auth(NULL);
 
 error2:
-	kvfree_sensitive(payload, plen);
+	if (payload) {
+		memzero_explicit(payload, plen);
+		kvfree(payload);
+	}
 error:
 	return ret;
 }

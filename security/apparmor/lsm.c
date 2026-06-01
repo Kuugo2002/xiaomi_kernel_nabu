@@ -123,11 +123,11 @@ static int apparmor_ptrace_traceme(struct task_struct *parent)
 	struct aa_label *tracer, *tracee;
 	int error;
 
-	tracee = __begin_current_label_crit_section();
+	tracee = begin_current_label_crit_section();
 	tracer = aa_get_task_label(parent);
 	error = aa_may_ptrace(tracer, tracee, AA_PTRACE_TRACE);
 	aa_put_label(tracer);
-	__end_current_label_crit_section(tracee);
+	end_current_label_crit_section(tracee);
 
 	return error;
 }

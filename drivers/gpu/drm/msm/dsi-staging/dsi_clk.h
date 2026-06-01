@@ -116,10 +116,10 @@ struct dsi_link_lp_clk_info {
 
 /**
  * struct link_clk_freq - Clock frequency information for Link clocks
- * @byte_clk_rate:   Frequency of DSI byte_clk in Hz.
- * @byte_intf_clk_rate:   Frequency of DSI byte_intf_clk in Hz.
- * @pixel_clk_rate:  Frequency of DSI pixel_clk in Hz.
- * @esc_clk_rate:    Frequency of DSI escape clock in Hz.
+ * @byte_clk_rate:   Frequency of DSI byte_clk in KHz.
+ * @byte_intf_clk_rate:   Frequency of DSI byte_intf_clk in KHz.
+ * @pixel_clk_rate:  Frequency of DSI pixel_clk in KHz.
+ * @esc_clk_rate:    Frequency of DSI escape clock in KHz.
  */
 struct link_clk_freq {
 	u32 byte_clk_rate;
@@ -279,7 +279,8 @@ int dsi_display_link_clk_force_update(void *handle);
  *
  * return: error code in case of failure or 0 for success.
  */
-int dsi_display_clk_ctrl(void *handle, u32 clk_type, u32 clk_state);
+int dsi_display_clk_ctrl(void *handle,
+	enum dsi_clk_type clk_type, enum dsi_clk_state clk_state);
 
 /**
  * dsi_clk_set_link_frequencies() - set frequencies for link clks

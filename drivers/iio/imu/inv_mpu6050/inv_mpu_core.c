@@ -421,13 +421,13 @@ error_read_raw_unlock:
 			ret = inv_mpu6050_sensor_show(st, st->reg->gyro_offset,
 						chan->channel2, val);
 			mutex_unlock(&st->lock);
-			return ret;
+			return IIO_VAL_INT;
 		case IIO_ACCEL:
 			mutex_lock(&st->lock);
 			ret = inv_mpu6050_sensor_show(st, st->reg->accl_offset,
 						chan->channel2, val);
 			mutex_unlock(&st->lock);
-			return ret;
+			return IIO_VAL_INT;
 
 		default:
 			return -EINVAL;

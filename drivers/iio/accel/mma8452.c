@@ -1391,7 +1391,7 @@ static int mma8452_trigger_setup(struct iio_dev *indio_dev)
 	if (ret)
 		return ret;
 
-	indio_dev->trig = iio_trigger_get(trig);
+	indio_dev->trig = trig;
 
 	return 0;
 }
@@ -1407,14 +1407,10 @@ static int mma8452_reset(struct i2c_client *client)
 	int i;
 	int ret;
 
-	/*
-	 * Find on fxls8471, after config reset bit, it reset immediately,
-	 * and will not give ACK, so here do not check the return value.
-	 * The following code will read the reset register, and check whether
-	 * this reset works.
-	 */
-	i2c_smbus_write_byte_data(client, MMA8452_CTRL_REG2,
+	ret = i2c_smbus_write_byte_data(client,	MMA8452_CTRL_REG2,
 					MMA8452_CTRL_REG2_RST);
+	if (ret < 0)
+		return ret;
 
 	for (i = 0; i < 10; i++) {
 		usleep_range(100, 200);
@@ -1587,12 +1583,9 @@ static int mma8452_probe(struct i2c_client *client,
 
 	ret = mma8452_set_freefall_mode(data, false);
 	if (ret < 0)
-		goto unregister_device;
+		goto buffer_cleanup;
 
 	return 0;
-
-unregister_device:
-	iio_device_unregister(indio_dev);
 
 buffer_cleanup:
 	iio_triggered_buffer_cleanup(indio_dev);

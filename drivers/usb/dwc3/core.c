@@ -718,19 +718,19 @@ static void dwc3_core_exit(struct dwc3 *dwc)
 {
 	dwc3_event_buffers_cleanup(dwc);
 
-	usb_phy_set_suspend(dwc->usb2_phy1, 1);
-	usb_phy_set_suspend(dwc->usb2_phy, 1);
-	usb_phy_set_suspend(dwc->usb3_phy1, 1);
-	usb_phy_set_suspend(dwc->usb3_phy, 1);
-	phy_power_off(dwc->usb2_generic_phy);
-	phy_power_off(dwc->usb3_generic_phy);
-
 	usb_phy_shutdown(dwc->usb2_phy1);
 	usb_phy_shutdown(dwc->usb2_phy);
 	usb_phy_shutdown(dwc->usb3_phy1);
 	usb_phy_shutdown(dwc->usb3_phy);
 	phy_exit(dwc->usb2_generic_phy);
 	phy_exit(dwc->usb3_generic_phy);
+
+	usb_phy_set_suspend(dwc->usb2_phy1, 1);
+	usb_phy_set_suspend(dwc->usb2_phy, 1);
+	usb_phy_set_suspend(dwc->usb3_phy1, 1);
+	usb_phy_set_suspend(dwc->usb3_phy, 1);
+	phy_power_off(dwc->usb2_generic_phy);
+	phy_power_off(dwc->usb3_generic_phy);
 }
 
 static bool dwc3_core_is_valid(struct dwc3 *dwc)
@@ -879,13 +879,8 @@ int dwc3_core_init(struct dwc3 *dwc)
 
 	if (!dwc->ulpi_ready) {
 		ret = dwc3_core_ulpi_init(dwc);
-		if (ret) {
-			if (ret == -ETIMEDOUT) {
-				dwc3_core_soft_reset(dwc);
-				ret = -EPROBE_DEFER;
-			}
+		if (ret)
 			goto err0;
-		}
 		dwc->ulpi_ready = true;
 	}
 
@@ -1364,9 +1359,7 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	void __iomem		*regs;
 	int			irq;
-#ifdef CONFIG_IPC_LOGGING
 	char			dma_ipc_log_ctx_name[40];
-#endif
 
 	if (count >= DWC_CTRL_COUNT) {
 		dev_err(dev, "Err dwc instance %d >= %d available\n",
@@ -1465,7 +1458,6 @@ static int dwc3_probe(struct platform_device *pdev)
 		}
 	}
 
-#ifdef CONFIG_IPC_LOGGING
 	dwc->dwc_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES,
 					dev_name(dwc->dev), 0);
 	if (!dwc->dwc_ipc_log_ctxt)
@@ -1477,7 +1469,6 @@ static int dwc3_probe(struct platform_device *pdev)
 						dma_ipc_log_ctx_name, 0);
 	if (!dwc->dwc_dma_ipc_log_ctxt)
 		dev_err(dwc->dev, "Error getting ipc_log_ctxt for ep_events\n");
-#endif
 
 	dwc3_instance[count] = dwc;
 	dwc->index = count;
@@ -1486,18 +1477,6 @@ static int dwc3_probe(struct platform_device *pdev)
 	pm_runtime_allow(dev);
 	dwc3_debugfs_init(dwc);
 	return 0;
-
-	dwc3_event_buffers_cleanup(dwc);
-
-	usb_phy_shutdown(dwc->usb2_phy);
-	usb_phy_shutdown(dwc->usb3_phy);
-	phy_exit(dwc->usb2_generic_phy);
-	phy_exit(dwc->usb3_generic_phy);
-
-	usb_phy_set_suspend(dwc->usb2_phy, 1);
-	usb_phy_set_suspend(dwc->usb3_phy, 1);
-	phy_power_off(dwc->usb2_generic_phy);
-	phy_power_off(dwc->usb3_generic_phy);
 
 err3:
 	dwc3_free_scratch_buffers(dwc);
@@ -1532,11 +1511,8 @@ static int dwc3_remove(struct platform_device *pdev)
 
 	dwc3_debugfs_exit(dwc);
 	dwc3_gadget_exit(dwc);
-
 	pm_runtime_allow(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-	pm_runtime_put_noidle(&pdev->dev);
-	pm_runtime_set_suspended(&pdev->dev);
 
 	dwc3_free_event_buffers(dwc);
 	dwc3_free_scratch_buffers(dwc);

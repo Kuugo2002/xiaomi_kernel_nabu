@@ -667,7 +667,7 @@ void ptep_zap_unused(struct mm_struct *mm, unsigned long addr,
 		pte_clear(mm, addr, ptep);
 	}
 	if (reset)
-		pgste_val(pgste) &= ~(_PGSTE_GPS_USAGE_MASK | _PGSTE_GPS_NODAT);
+		pgste_val(pgste) &= ~_PGSTE_GPS_USAGE_MASK;
 	pgste_set_unlock(ptep, pgste);
 	preempt_enable();
 }
@@ -684,7 +684,7 @@ void ptep_zap_key(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
 	pgste_val(pgste) |= PGSTE_GR_BIT | PGSTE_GC_BIT;
 	ptev = pte_val(*ptep);
 	if (!(ptev & _PAGE_INVALID) && (ptev & _PAGE_WRITE))
-		page_set_storage_key(ptev & PAGE_MASK, PAGE_DEFAULT_KEY, 0);
+		page_set_storage_key(ptev & PAGE_MASK, PAGE_DEFAULT_KEY, 1);
 	pgste_set_unlock(ptep, pgste);
 	preempt_enable();
 }
@@ -896,7 +896,6 @@ EXPORT_SYMBOL(get_guest_storage_key);
 int pgste_perform_essa(struct mm_struct *mm, unsigned long hva, int orc,
 			unsigned long *oldpte, unsigned long *oldpgste)
 {
-	struct vm_area_struct *vma;
 	unsigned long pgstev;
 	spinlock_t *ptl;
 	pgste_t pgste;
@@ -906,10 +905,6 @@ int pgste_perform_essa(struct mm_struct *mm, unsigned long hva, int orc,
 	WARN_ON_ONCE(orc > ESSA_MAX);
 	if (unlikely(orc > ESSA_MAX))
 		return -EINVAL;
-
-	vma = find_vma(mm, hva);
-	if (!vma || hva < vma->vm_start || is_vm_hugetlb_page(vma))
-		return -EFAULT;
 	ptep = get_locked_pte(mm, hva, &ptl);
 	if (unlikely(!ptep))
 		return -EFAULT;
@@ -1002,14 +997,10 @@ EXPORT_SYMBOL(pgste_perform_essa);
 int set_pgste_bits(struct mm_struct *mm, unsigned long hva,
 			unsigned long bits, unsigned long value)
 {
-	struct vm_area_struct *vma;
 	spinlock_t *ptl;
 	pgste_t new;
 	pte_t *ptep;
 
-	vma = find_vma(mm, hva);
-	if (!vma || hva < vma->vm_start || is_vm_hugetlb_page(vma))
-		return -EFAULT;
 	ptep = get_locked_pte(mm, hva, &ptl);
 	if (unlikely(!ptep))
 		return -EFAULT;
@@ -1034,13 +1025,9 @@ EXPORT_SYMBOL(set_pgste_bits);
  */
 int get_pgste(struct mm_struct *mm, unsigned long hva, unsigned long *pgstep)
 {
-	struct vm_area_struct *vma;
 	spinlock_t *ptl;
 	pte_t *ptep;
 
-	vma = find_vma(mm, hva);
-	if (!vma || hva < vma->vm_start || is_vm_hugetlb_page(vma))
-		return -EFAULT;
 	ptep = get_locked_pte(mm, hva, &ptl);
 	if (unlikely(!ptep))
 		return -EFAULT;

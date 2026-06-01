@@ -92,14 +92,6 @@ source "drivers/staging/skein/Kconfig"
 
 source "drivers/staging/unisys/Kconfig"
 
-config RTMM
-	tristate "RRTM"
-	default y
-
-config KTRACE
-	tristate "KTRACE"
-	default y
-
 source "drivers/staging/clocking-wizard/Kconfig"
 
 source "drivers/staging/fbtft/Kconfig"

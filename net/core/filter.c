@@ -29,11 +29,11 @@
 #include <linux/sock_diag.h>
 #include <linux/in.h>
 #include <linux/inet.h>
-#include <net/inet_common.h>
 #include <linux/netdevice.h>
 #include <linux/if_packet.h>
 #include <linux/if_arp.h>
 #include <linux/gfp.h>
+#include <net/inet_common.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/netlink.h>
@@ -2162,8 +2162,6 @@ static int bpf_skb_proto_4_to_6(struct sk_buff *skb)
 			skb_shinfo(skb)->gso_type |=  SKB_GSO_TCPV6;
 		}
 
-		/* Due to IPv6 header, MSS needs to be downgraded. */
-		skb_shinfo(skb)->gso_size -= len_diff;
 		/* Header must be checked, and gso_segs recomputed. */
 		skb_shinfo(skb)->gso_type |= SKB_GSO_DODGY;
 		skb_shinfo(skb)->gso_segs = 0;
@@ -2198,8 +2196,6 @@ static int bpf_skb_proto_6_to_4(struct sk_buff *skb)
 			skb_shinfo(skb)->gso_type |=  SKB_GSO_TCPV4;
 		}
 
-		/* Due to IPv4 header, MSS can be upgraded. */
-		skb_shinfo(skb)->gso_size += len_diff;
 		/* Header must be checked, and gso_segs recomputed. */
 		skb_shinfo(skb)->gso_type |= SKB_GSO_DODGY;
 		skb_shinfo(skb)->gso_segs = 0;
@@ -3284,45 +3280,6 @@ static const struct bpf_func_proto bpf_bind_proto = {
 	.arg3_type	= ARG_CONST_SIZE,
 };
 
-/*
- * simple hash function for a string,
- * http://www.cse.yorku.ca/~oz/hash.html
- */
-static u64 hash_string(const char *str)
-{
-	u64 hash = 5381;
-	int c;
-
-	while ((c = *str++))
-		hash = ((hash << 5) + hash) + c;
-
-	return hash;
-}
-
-BPF_CALL_1(bpf_get_comm_hash_from_sk, struct sk_buff *, skb)
-{
-	struct task_struct *p_task = NULL;
-	struct sock *sk = sk_to_full_sk(skb->sk);
-	u64 hash = -1;
-	pid_t pid = sk->pid_num;
-	rcu_read_lock();
-	p_task = find_task_by_pid_ns(pid, &init_pid_ns);
-	if (p_task) {
-		get_task_struct(p_task);
-		hash = hash_string(p_task->comm);
-		put_task_struct(p_task);
-	}
-	rcu_read_unlock();
-	return hash;
-}
-
-static const struct bpf_func_proto bpf_get_comm_hash_from_sk_proto = {
-	.func           = bpf_get_comm_hash_from_sk,
-	.gpl_only       = false,
-	.ret_type       = RET_INTEGER,
-	.arg1_type      = ARG_PTR_TO_CTX,
-};
-
 static const struct bpf_func_proto *
 bpf_base_func_proto(enum bpf_func_id func_id)
 {
@@ -3913,6 +3870,8 @@ static bool sock_addr_is_valid_access(int off, int size,
 		switch (prog->expected_attach_type) {
 		case BPF_CGROUP_INET4_BIND:
 		case BPF_CGROUP_INET4_CONNECT:
+		case BPF_CGROUP_UDP4_SENDMSG:
+		case BPF_CGROUP_UDP4_RECVMSG:
 			break;
 		default:
 			return false;
@@ -3921,7 +3880,26 @@ static bool sock_addr_is_valid_access(int off, int size,
 	case bpf_ctx_range_till(struct bpf_sock_addr, user_ip6[0], user_ip6[3]):
 		switch (prog->expected_attach_type) {
 		case BPF_CGROUP_INET6_BIND:
-		case BPF_CGROUP_INET4_CONNECT:
+		case BPF_CGROUP_INET6_CONNECT:
+		case BPF_CGROUP_UDP6_SENDMSG:
+		case BPF_CGROUP_UDP6_RECVMSG:
+			break;
+		default:
+			return false;
+		}
+		break;
+	case bpf_ctx_range(struct bpf_sock_addr, msg_src_ip4):
+		switch (prog->expected_attach_type) {
+		case BPF_CGROUP_UDP4_SENDMSG:
+			break;
+		default:
+			return false;
+		}
+		break;
+	case bpf_ctx_range_till(struct bpf_sock_addr, msg_src_ip6[0],
+				msg_src_ip6[3]):
+		switch (prog->expected_attach_type) {
+		case BPF_CGROUP_UDP6_SENDMSG:
 			break;
 		default:
 			return false;
@@ -3932,6 +3910,9 @@ static bool sock_addr_is_valid_access(int off, int size,
 	switch (off) {
 	case bpf_ctx_range(struct bpf_sock_addr, user_ip4):
 	case bpf_ctx_range_till(struct bpf_sock_addr, user_ip6[0], user_ip6[3]):
+	case bpf_ctx_range(struct bpf_sock_addr, msg_src_ip4):
+	case bpf_ctx_range_till(struct bpf_sock_addr, msg_src_ip6[0],
+				msg_src_ip6[3]):
 		/* Only narrow read access allowed for now. */
 		if (type == BPF_READ) {
 			bpf_ctx_record_field_size(info, size_default);
@@ -4606,6 +4587,23 @@ static u32 sock_addr_convert_ctx_access(enum bpf_access_type type,
 		*insn++ = BPF_ALU32_IMM(BPF_AND, si->dst_reg, SK_FL_PROTO_MASK);
 		*insn++ = BPF_ALU32_IMM(BPF_RSH, si->dst_reg,
 					SK_FL_PROTO_SHIFT);
+		break;
+
+	case offsetof(struct bpf_sock_addr, msg_src_ip4):
+		/* Treat t_ctx as struct in_addr for msg_src_ip4. */
+		SOCK_ADDR_LOAD_OR_STORE_NESTED_FIELD_SIZE_OFF(
+			struct bpf_sock_addr_kern, struct in_addr, t_ctx,
+			s_addr, BPF_SIZE(si->code), 0, tmp_reg);
+		break;
+
+	case bpf_ctx_range_till(struct bpf_sock_addr, msg_src_ip6[0],
+				msg_src_ip6[3]):
+		off = si->off;
+		off -= offsetof(struct bpf_sock_addr, msg_src_ip6[0]);
+		/* Treat t_ctx as struct in6_addr for msg_src_ip6. */
+		SOCK_ADDR_LOAD_OR_STORE_NESTED_FIELD_SIZE_OFF(
+			struct bpf_sock_addr_kern, struct in6_addr, t_ctx,
+			s6_addr32[0], BPF_SIZE(si->code), off, tmp_reg);
 		break;
 	}
 

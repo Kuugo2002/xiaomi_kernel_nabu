@@ -47,7 +47,6 @@
 #include <asm/irq_remapping.h>
 #include <asm/microcode.h>
 #include <asm/spec-ctrl.h>
-#include <asm/cpu_device_id.h>
 
 #include <asm/virtext.h>
 #include "trace.h"
@@ -390,9 +389,6 @@ static void recalc_intercepts(struct vcpu_svm *svm)
 	c->intercept_dr = h->intercept_dr | g->intercept_dr;
 	c->intercept_exceptions = h->intercept_exceptions | g->intercept_exceptions;
 	c->intercept = h->intercept | g->intercept;
-
-	c->intercept |= (1ULL << INTERCEPT_VMLOAD);
-	c->intercept |= (1ULL << INTERCEPT_VMSAVE);
 }
 
 static inline struct vmcb *get_host_vmcb(struct vcpu_svm *svm)
@@ -1212,7 +1208,12 @@ static __init int svm_hardware_setup(void)
 		}
 	}
 
-	vgif = false; /* Disabled for CVE-2021-3653 */
+	if (vgif) {
+		if (!boot_cpu_has(X86_FEATURE_VGIF))
+			vgif = false;
+		else
+			pr_info("Virtual GIF supported\n");
+	}
 
 	return 0;
 
@@ -2756,8 +2757,8 @@ static int nested_svm_exit_special(struct vcpu_svm *svm)
 			return NESTED_EXIT_HOST;
 		break;
 	case SVM_EXIT_EXCP_BASE + PF_VECTOR:
-		/* Trap async PF even if not shadowing */
-		if (!npt_enabled || svm->vcpu.arch.apf.host_apf_reason)
+		/* When we're shadowing, trap PFs, but not async PF */
+		if (!npt_enabled && svm->vcpu.arch.apf.host_apf_reason == 0)
 			return NESTED_EXIT_HOST;
 		break;
 	default:
@@ -2846,7 +2847,7 @@ static inline void copy_vmcb_control_area(struct vmcb *dst_vmcb, struct vmcb *fr
 	dst->iopm_base_pa         = from->iopm_base_pa;
 	dst->msrpm_base_pa        = from->msrpm_base_pa;
 	dst->tsc_offset           = from->tsc_offset;
-	/* asid not copied, it is handled manually for svm->vmcb.  */
+	dst->asid                 = from->asid;
 	dst->tlb_ctl              = from->tlb_ctl;
 	dst->int_ctl              = from->int_ctl;
 	dst->int_vector           = from->int_vector;
@@ -3160,13 +3161,7 @@ static bool nested_svm_vmrun(struct vcpu_svm *svm)
 	svm->nested.intercept            = nested_vmcb->control.intercept;
 
 	svm_flush_tlb(&svm->vcpu, true);
-
-	svm->vmcb->control.int_ctl &=
-			V_INTR_MASKING_MASK | V_GIF_ENABLE_MASK | V_GIF_MASK;
-
-	svm->vmcb->control.int_ctl |= nested_vmcb->control.int_ctl &
-			(V_TPR_MASK | V_IRQ_INJECTION_BITS_MASK);
-
+	svm->vmcb->control.int_ctl = nested_vmcb->control.int_ctl | V_INTR_MASKING_MASK;
 	if (nested_vmcb->control.int_ctl & V_INTR_MASKING_MASK)
 		svm->vcpu.arch.hflags |= HF_VINTR_MASK;
 	else
@@ -3537,7 +3532,7 @@ static int cr_interception(struct vcpu_svm *svm)
 	err = 0;
 	if (cr >= 16) { /* mov to cr */
 		cr -= 16;
-		val = kvm_register_readl(&svm->vcpu, reg);
+		val = kvm_register_read(&svm->vcpu, reg);
 		switch (cr) {
 		case 0:
 			if (!check_selective_cr0_intercepted(svm, val))
@@ -3582,7 +3577,7 @@ static int cr_interception(struct vcpu_svm *svm)
 			kvm_queue_exception(&svm->vcpu, UD_VECTOR);
 			return 1;
 		}
-		kvm_register_writel(&svm->vcpu, reg, val);
+		kvm_register_write(&svm->vcpu, reg, val);
 	}
 	return kvm_complete_insn_gp(&svm->vcpu, err);
 }
@@ -3612,13 +3607,13 @@ static int dr_interception(struct vcpu_svm *svm)
 	if (dr >= 16) { /* mov to DRn */
 		if (!kvm_require_dr(&svm->vcpu, dr - 16))
 			return 1;
-		val = kvm_register_readl(&svm->vcpu, reg);
+		val = kvm_register_read(&svm->vcpu, reg);
 		kvm_set_dr(&svm->vcpu, dr - 16, val);
 	} else {
 		if (!kvm_require_dr(&svm->vcpu, dr))
 			return 1;
 		kvm_get_dr(&svm->vcpu, dr, &val);
-		kvm_register_writel(&svm->vcpu, reg, val);
+		kvm_register_write(&svm->vcpu, reg, val);
 	}
 
 	return kvm_skip_emulated_instruction(&svm->vcpu);
@@ -3645,9 +3640,9 @@ static int svm_get_msr_feature(struct kvm_msr_entry *msr)
 	msr->data = 0;
 
 	switch (msr->index) {
-	case MSR_AMD64_DE_CFG:
-		if (cpu_feature_enabled(X86_FEATURE_LFENCE_RDTSC))
-			msr->data |= MSR_AMD64_DE_CFG_LFENCE_SERIALIZE;
+	case MSR_F10H_DECFG:
+		if (boot_cpu_has(X86_FEATURE_LFENCE_RDTSC))
+			msr->data |= MSR_F10H_DECFG_LFENCE_SERIALIZE;
 		break;
 	default:
 		return 1;
@@ -3756,7 +3751,7 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			msr_info->data = 0x1E;
 		}
 		break;
-	case MSR_AMD64_DE_CFG:
+	case MSR_F10H_DECFG:
 		msr_info->data = svm->msr_decfg;
 		break;
 	default:
@@ -3948,7 +3943,7 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_VM_IGNNE:
 		vcpu_unimpl(vcpu, "unimplemented wrmsr: 0x%x data 0x%llx\n", ecx, data);
 		break;
-	case MSR_AMD64_DE_CFG: {
+	case MSR_F10H_DECFG: {
 		struct kvm_msr_entry msr_entry;
 
 		msr_entry.index = msr->index;
@@ -4612,6 +4607,8 @@ static void svm_set_irq(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 
+	BUG_ON(!(gif_set(svm)));
+
 	trace_kvm_inj_virq(vcpu->arch.interrupt.nr);
 	++vcpu->stat.irq_injections;
 
@@ -4865,7 +4862,6 @@ static int svm_update_pi_irte(struct kvm *kvm, unsigned int host_irq,
 			 * - Tell IOMMU to use legacy mode for this interrupt.
 			 * - Retrieve ga_tag of prior interrupt remapping data.
 			 */
-			pi.prev_ga_tag = 0;
 			pi.is_guest_mode = false;
 			ret = irq_set_vcpu_affinity(host_irq, &pi);
 

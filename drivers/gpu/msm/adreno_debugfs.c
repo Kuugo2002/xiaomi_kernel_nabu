@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2008-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2008-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -131,6 +131,11 @@ static void sync_event_print(struct seq_file *s,
 		break;
 	}
 	case KGSL_CMD_SYNCPOINT_TYPE_FENCE: {
+		int i;
+
+		for (i = 0; i < sync_event->info.num_fences; i++)
+			seq_printf(s, "sync: %s",
+				sync_event->info.fences[i].name);
 		break;
 	}
 	default:
@@ -270,7 +275,7 @@ static int ctx_print(struct seq_file *s, void *unused)
 		   ctx_type_str(drawctxt->type),
 		   drawctxt->base.priority,
 		   drawctxt->base.proc_priv->comm,
-		   pid_nr(drawctxt->base.proc_priv->pid),
+		   drawctxt->base.proc_priv->pid,
 		   drawctxt->base.tid);
 
 	seq_puts(s, "flags: ");
