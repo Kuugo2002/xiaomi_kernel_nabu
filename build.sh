@@ -174,6 +174,29 @@ else
     color_echo "$yellow" "跳过清理步骤..."
 fi
 
+# KernelSU 源码清理与同步
+if $USE_KSU; then
+    color_echo "$green" "正在检查并清理旧的 KernelSU-Next 源码..."
+    
+    # 移除源码根目录下的 KernelSU-Next 文件夹
+    if [ -d "KernelSU-Next" ]; then
+        color_echo "$yellow" "移除旧的 KernelSU-Next 目录..."
+        rm -rf KernelSU-Next
+    fi
+
+    # 移除 drivers/kernelsu 文件夹
+    if [ -d "drivers/kernelsu" ]; then
+        color_echo "$yellow" "移除旧的 drivers/kernelsu 目录..."
+        rm -rf drivers/kernelsu
+    fi
+
+    # 拉取并安装 KernelSU-Next
+    color_echo "$green" "正在下载并配置 KernelSU-Next"
+    curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+else
+    color_echo "$yellow" "由于未启用 KernelSU，跳过 KernelSU-Next 源码下载与同步。"
+fi
+
 # 添加日期到本地版本
 LOCAL_VERSION_STR="-perf"
 LOCAL_VERSION_DATE="-${KERNEL_NAME}-${KERNEL_VERSION}-$(date +%y%m%d)${FIX_VERSION}"

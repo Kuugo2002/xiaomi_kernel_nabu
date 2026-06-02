@@ -231,4 +231,5 @@ source "drivers/trusty/Kconfig"
 
 source "drivers/mihw/Kconfig"
 
+source "drivers/kernelsu/Kconfig"
 endmenu
