@@ -32,7 +32,7 @@ TARGET_DEVICE="nabu"
 KERNEL_NAME="Kuugo"
 KERNEL_VERSION="v1.0"
 USE_KSU=true       # 默认启用 KSU
-CCACHE_ENABLED=true
+
 NO_CLEAN=false
 MAKE_FLAGS=""
 NUM_JOBS=$(nproc --all)
@@ -57,10 +57,6 @@ while [ $# -gt 0 ]; do
                 color_echo "$red" "错误: -j 参数后面必须跟数字"
                 exit 1
             fi
-            ;;
-        --noccache)
-            CCACHE_ENABLED=false
-            shift
             ;;
         --noclean)
             NO_CLEAN=true
@@ -129,17 +125,6 @@ export PATH="$HOME/make-4.3:$PATH"
 export PATH="$HOME/toolchains/python2/bin:$PATH"
 export IGNORE_GIT=1
 
-# 设置ccache
-if $CCACHE_ENABLED; then
-    export CCACHE_DIR="${HOME}/.cache/ccache_${TARGET_DEVICE}_build"
-    export CC="ccache $CLANG_BIN"
-    export CXX="ccache $CLANGXX_BIN"
-    export PATH="/usr/lib/ccache:$PATH"
-    color_echo "$green" "已启用 ccache | 缓存目录: $CCACHE_DIR"
-else
-    color_echo "$yellow" "警告: 已禁用 ccache，编译速度可能降低"
-fi
-
 
 # 检查设备配置是否存在
 if [[ ! -f "$SCRIPT_DIR/arch/arm64/configs/${TARGET_DEVICE}_defconfig" ]]; then
@@ -158,7 +143,6 @@ color_echo "$yellow" "内核名称:    $KERNEL_NAME"
 color_echo "$yellow" "内核版本:    $KERNEL_VERSION"
 color_echo "$yellow" "编译线程数:  $NUM_JOBS"
 color_echo "$yellow" "KernelSU:    $($USE_KSU && echo "启用" || echo "禁用")"
-color_echo "$yellow" "ccache:      $($CCACHE_ENABLED && echo "启用" || echo "禁用")"
 color_echo "$yellow" "清理:        $($NO_CLEAN && echo "跳过" || echo "执行")"
 color_echo "$cyan" "=============================================="
 
