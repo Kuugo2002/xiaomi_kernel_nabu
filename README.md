@@ -23,9 +23,9 @@
 
 ## ⚠️ 兼容性与注意事项
 
-- **Android 15 (HyperOS 2.0 / 3.0)**：理论上支持 HyperOS 3.0 的 Android 15 版本，但**无法支持手写笔**功能。同样，HyperOS 2.0 的 Android 15 版本也无法支持手写笔。
 - **Android 16**：**不支持**任何 Android 16 的版本。
-- **🌟 推荐系统**：强烈建议刷入酷安用户 **@mytiantian_是天天吖** 提供的 `OS2.x.UMZCNXM_14.0` 版本，以获得最稳定、最佳的体验。
+- **HyperOS 1**：使用 Droidspaces 时，需要**开启强制 Cgroup v1**，否则设备会卡死重启。
+- **HyperOS 2**：使用 Droidspaces 时，**原装键盘无法使用**。
 
 ## 🛠️ 编译指南
 
