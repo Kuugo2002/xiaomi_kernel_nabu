@@ -23,9 +23,9 @@
 
 ## ⚠️ 兼容性与注意事项
 
-- **Android 15 (HyperOS 2.0 / 3.0)**：理论上支持 HyperOS 3.0 的 Android 15 版本，但**无法支持手写笔**功能。同样，HyperOS 2.0 的 Android 15 版本也无法支持手写笔。
 - **Android 16**：**不支持**任何 Android 16 的版本。
-- **🌟 推荐系统**：强烈建议刷入酷安用户 **@mytiantian_是天天吖** 提供的 `OS2.x.UMZCNXM_14.0` 版本，以获得最稳定、最佳的体验。
+- **HyperOS 1**：使用 Droidspaces 时，需要**开启强制 Cgroup v1**，否则设备会卡死重启。
+- **HyperOS 2**：使用 Droidspaces 时，**原装键盘无法使用**。
 
 ## 🛠️ 编译指南
 
@@ -54,7 +54,6 @@ CLANG_PATH=${CLANG_PATH:-/你的/实际/clang/路径/bin}
 | :--- | :--- |
 | `[设备代号]` | 指定目标设备，默认为 `nabu`。 |
 | `-j <线程数>` | 指定编译使用的 CPU 线程数（默认使用全部核心 `nproc --all`）。 |
-| `--noccache` | 禁用 `ccache` 编译缓存。 |
 | `--noclean` | 跳过编译前的清理步骤（保留旧的构建目录，适合增量编译）。 |
 | `--nothinlto` | 禁用 ThinLTO 优化。 |
 | `--noksu` | **禁用 KernelSU**。即使当前分支是 KSU 分支，编译时也会自动关闭 KSU 功能并跳过 KSU 源码下载。 |
@@ -87,6 +86,3 @@ chmod +x build.sh
 
 - **HyperOS 1.0 源码来源**：[Rave-Project / android_kernel_nabu_sm8150-ac](https://github.com/Rave-Project/android_kernel_nabu_sm8150-ac)
 - **HyperOS 2.0 源码来源**：[sticpaper / sticpaper_kernel_source](https://github.com/sticpaper/sticpaper_kernel_source)
-
----
-*如有问题或建议，欢迎提交 Issue 或 Pull Request。*
