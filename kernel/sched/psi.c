@@ -147,7 +147,6 @@
 static int psi_bug __read_mostly;
 
 DEFINE_STATIC_KEY_FALSE(psi_disabled);
-DEFINE_STATIC_KEY_TRUE(psi_cgroups_enabled);
 
 #ifdef CONFIG_PSI_DEFAULT_DISABLED
 static bool psi_enable;
@@ -218,9 +217,6 @@ void __init psi_init(void)
 		static_branch_enable(&psi_disabled);
 		return;
 	}
-
-	if (!cgroup_psi_enabled())
-		static_branch_disable(&psi_cgroups_enabled);
 
 	psi_period = jiffies_to_nsecs(PSI_FREQ);
 	group_init(&psi_system);
@@ -736,23 +732,23 @@ static u32 psi_group_change(struct psi_group *group, int cpu,
 
 static struct psi_group *iterate_groups(struct task_struct *task, void **iter)
 {
-	if (*iter == &psi_system)
-		return NULL;
-
 #ifdef CONFIG_CGROUPS
-	if (static_branch_likely(&psi_cgroups_enabled)) {
-		struct cgroup *cgroup = NULL;
+	struct cgroup *cgroup = NULL;
 
-		if (!*iter)
-			cgroup = task->cgroups->dfl_cgrp;
-		else
-			cgroup = cgroup_parent(*iter);
+	if (!*iter)
+		cgroup = task->cgroups->dfl_cgrp;
+	else if (*iter == &psi_system)
+		return NULL;
+	else
+		cgroup = cgroup_parent(*iter);
 
-		if (cgroup && cgroup_parent(cgroup)) {
-			*iter = cgroup;
-			return cgroup_psi(cgroup);
-		}
+	if (cgroup && cgroup_parent(cgroup)) {
+		*iter = cgroup;
+		return cgroup_psi(cgroup);
 	}
+#else
+	if (*iter)
+		return NULL;
 #endif
 	*iter = &psi_system;
 	return &psi_system;
@@ -1161,6 +1157,19 @@ void psi_trigger_destroy(struct psi_trigger *t)
 		kthread_destroy_worker(kworker_to_destroy);
 	}
 	kfree(t);
+}
+
+void psi_trigger_replace(void **trigger_ptr, struct psi_trigger *new)
+{
+	struct psi_trigger *old;
+
+	if (static_branch_likely(&psi_disabled))
+		return;
+
+	old = *trigger_ptr;
+	smp_store_release(trigger_ptr, new);
+	if (old)
+		psi_trigger_destroy(old);
 }
 
 unsigned int psi_trigger_poll(void **trigger_ptr, struct file *file,

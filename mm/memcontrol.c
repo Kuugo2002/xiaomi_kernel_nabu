@@ -3975,16 +3975,6 @@ static ssize_t memcg_write_event_control(struct kernfs_open_file *of,
 		goto out_put_cfile;
 
 	/*
-	 * The control file must be a regular cgroup1 file. As a regular cgroup
-	 * file can't be renamed, it's safe to access its name afterwards.
-	 */
-	cdentry = cfile.file->f_path.dentry;
-	if (cdentry->d_sb->s_type != &cgroup_fs_type || !d_is_reg(cdentry)) {
-		ret = -EINVAL;
-		goto out_put_cfile;
-	}
-
-	/*
 	 * Determine the event callbacks and set them in @event.  This used
 	 * to be done via struct cftype but cgroup core no longer knows
 	 * about these events.  The following is crude but the whole thing
@@ -3992,6 +3982,7 @@ static ssize_t memcg_write_event_control(struct kernfs_open_file *of,
 	 *
 	 * DO NOT ADD NEW FILES.
 	 */
+	cdentry = cfile.file->f_path.dentry;
 	name = cdentry->d_name.name;
 
 	if (!strcmp(name, "memory.usage_in_bytes")) {
