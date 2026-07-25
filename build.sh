@@ -103,6 +103,12 @@ MAKE_ARGS+=" KBUILD_BUILD_USER=kuugo"
 MAKE_ARGS+=" ARCH=arm64"
 MAKE_ARGS+=" SUBARCH=arm64"
 
+# 忽略部分错误
+MAKE_ARGS+=" KCFLAGS=-Wno-unused-but-set-variable"
+MAKE_ARGS+=" KCFLAGS+=-Wno-enum-conversion"
+MAKE_ARGS+=" KCFLAGS+=-Wno-strict-prototypes"
+MAKE_ARGS+=" KCFLAGS+=-Wno-array-parameter"
+
 # LLVM toolchain
 MAKE_ARGS+=" CC=$CLANG_BIN"
 MAKE_ARGS+=" LD=ld.lld"
