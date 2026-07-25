@@ -191,6 +191,8 @@ make $MAKE_ARGS "${TARGET_DEVICE}_defconfig"
 if $USE_KSU; then
     color_echo "$green" "启用 KernelSU..."
     ./scripts/config --file "$BUILD_DIR/.config" \
+        -e DEBUG_KERNEL \
+        -e KALLSYMS_ALL \
         -e KSU \
         -e KSU_SUSFS
 
