@@ -55,8 +55,6 @@ CLANG_PATH=${CLANG_PATH:-/你的/实际/clang/路径/bin}
 | `[设备代号]` | 指定目标设备，默认为 `nabu`。 |
 | `-j <线程数>` | 指定编译使用的 CPU 线程数（默认使用全部核心 `nproc --all`）。 |
 | `--noclean` | 跳过编译前的清理步骤（保留旧的构建目录，适合增量编译）。 |
-| `--nothinlto` | 禁用 ThinLTO 优化。 |
-| `--noksu` | **禁用 KernelSU**。即使当前分支是 KSU 分支，编译时也会自动关闭 KSU 功能并跳过 KSU 源码下载。 |
 | `--` | 分隔符，其后的所有参数将直接传递给底层的 `make` 命令。 |
 
 **编译示例：**
@@ -69,15 +67,11 @@ chmod +x build.sh
 
 # 指定 16 线程编译，并跳过清理步骤（增量编译）
 ./build.sh nabu -j16 --noclean
-
-# 编译纯净版内核（禁用 KSU 功能）
-./build.sh nabu --noksu
 ```
 
 ## 📦 下载与刷入
 
 如果你不想自行编译，可以直接前往本仓库的 **Release** 页面下载已经编译好的 **AnyKernel3** 刷机包。
-- 刷机包命名格式通常为：`nabu_Kuugo-v1.0_[SU/NoSU]_日期.zip`
 - 请在 Recovery (如 TWRP / OrangeFox) 中直接刷入对应的 ZIP 文件即可。
 
 ## 🙏 源码致谢
