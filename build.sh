@@ -31,8 +31,6 @@ color_echo "$green" "工作目录: $SCRIPT_DIR"
 TARGET_DEVICE="nabu"
 KERNEL_NAME="Kuugo"
 KERNEL_VERSION="v1.0"
-USE_KSU=true       # 默认启用 KSU
-
 NO_CLEAN=false
 MAKE_FLAGS=""
 NUM_JOBS=$(nproc --all)
@@ -58,17 +56,8 @@ while [ $# -gt 0 ]; do
                 exit 1
             fi
             ;;
-
         --noclean)
             NO_CLEAN=true
-            shift
-            ;;
-        --nothinlto)
-            USE_THINLTO=false
-            shift
-            ;;
-        --noksu)
-            USE_KSU=false
             shift
             ;;
         --)
@@ -104,6 +93,12 @@ MAKE_ARGS+=" KBUILD_BUILD_USER=kuugo"
 MAKE_ARGS+=" ARCH=arm64"
 MAKE_ARGS+=" SUBARCH=arm64"
 
+# 忽略部分错误
+MAKE_ARGS+=" KCFLAGS=-Wno-unused-but-set-variable"
+MAKE_ARGS+=" KCFLAGS+=-Wno-enum-conversion"
+MAKE_ARGS+=" KCFLAGS+=-Wno-strict-prototypes"
+MAKE_ARGS+=" KCFLAGS+=-Wno-array-parameter"
+
 # LLVM toolchain
 MAKE_ARGS+=" CC=$CLANG_BIN"
 MAKE_ARGS+=" LD=ld.lld"
@@ -117,7 +112,6 @@ MAKE_ARGS+=" CROSS_COMPILE=aarch64-linux-gnu-"
 # 设置 PATH 环境变量
 export PATH="$CLANG_PATH:$PATH"
 export PATH="$HOME/toolchains/python2/bin:$PATH"
-
 
 # 检查设备配置是否存在
 if [[ ! -f "$SCRIPT_DIR/arch/arm64/configs/${TARGET_DEVICE}_defconfig" ]]; then
@@ -135,36 +129,12 @@ color_echo "$yellow" "目标设备:    $TARGET_DEVICE"
 color_echo "$yellow" "内核名称:    $KERNEL_NAME"
 color_echo "$yellow" "内核版本:    $KERNEL_VERSION"
 color_echo "$yellow" "编译线程数:  $NUM_JOBS"
-color_echo "$yellow" "KernelSU:    $($USE_KSU && echo "启用" || echo "禁用")"
-
+color_echo "$yellow" "KernelSU:    禁用"
 color_echo "$yellow" "清理:        $($NO_CLEAN && echo "跳过" || echo "执行")"
 color_echo "$cyan" "=============================================="
 
 color_echo "$green" "[clang 版本信息]:"
 "$CLANG_BIN" --version
-
-# KernelSU 源码清理与同步
-if $USE_KSU; then
-    color_echo "$green" "正在检查并清理旧的 ReSukiSU 源码..."
-    
-    # 移除源码根目录下的 KernelSU-Next 文件夹
-    if [ -d "KernelSU" ]; then
-        color_echo "$yellow" "移除旧的 KernelSU 目录..."
-        rm -rf KernelSU
-    fi
-
-    # 移除 drivers/kernelsu 文件夹
-    if [ -d "drivers/kernelsu" ]; then
-        color_echo "$yellow" "移除旧的 drivers/kernelsu 目录..."
-        rm -rf drivers/kernelsu
-    fi
-
-    # 拉取并安装 ReSukiSU
-    color_echo "$green" "正在下载并配置 ReSukiSU"
-    curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
-else
-    color_echo "$yellow" "由于未启用 KernelSU，跳过 ReSukiSU 源码下载与同步。"
-fi
 
 # 清理工作区
 if ! $NO_CLEAN; then
@@ -173,6 +143,25 @@ if ! $NO_CLEAN; then
 else
     color_echo "$yellow" "跳过清理步骤..."
 fi
+
+# KernelSU 源码清理与同步
+color_echo "$green" "正在检查并清理旧的 KernelSU 源码..."
+
+# 移除源码根目录下的 KernelSU 文件夹
+if [ -d "KernelSU" ] && ! $NO_CLEAN; then
+    color_echo "$yellow" "移除旧的 KernelSU 目录..."
+    rm -rf KernelSU
+fi
+
+# 移除 drivers/kernelsu 文件夹
+if [ -d "drivers/kernelsu" ] && ! $NO_CLEAN; then
+    color_echo "$yellow" "移除旧的 drivers/kernelsu 目录..."
+    rm -rf drivers/kernelsu
+fi
+
+# 拉取并安装指定的 Resukisu 版本
+color_echo "$green" "正在下载并配置 Resukisu"
+curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
 
 # 添加日期到本地版本
 LOCAL_VERSION_STR="-perf"
@@ -185,38 +174,6 @@ make $MAKE_ARGS "${TARGET_DEVICE}_defconfig"
 
 # 设置本地版本
 ./scripts/config --file "$BUILD_DIR/.config" --set-str CONFIG_LOCALVERSION "$LOCAL_VERSION_DATE"
-
-
-# 根据 KSU 启用/禁用配置
-if $USE_KSU; then
-    color_echo "$green" "启用 KernelSU..."
-    ./scripts/config --file "$BUILD_DIR/.config" \
-        -e DEBUG_KERNEL \
-        -e KALLSYMS_ALL \
-        -e KSU \
-        -e KSU_SUSFS
-
-else
-    color_echo "$yellow" "禁用 KernelSU..."
-    ./scripts/config --file "$BUILD_DIR/.config" \
-        -d KSU \
-        -d KSU_MANUAL_HOOK \
-        -d KSU_SUSFS_HAS_MAGIC_MOUNT \
-        -d KSU_SUSFS_SUS_MOUNT \
-        -d KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
-        -d KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
-        -d KSU_SUSFS_SUS_KSTAT \
-        -d KSU_SUSFS_TRY_UMOUNT \
-        -d KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
-        -d KSU_SUSFS_SPOOF_UNAME \
-        -d KSU_SUSFS_ENABLE_LOG \
-        -d KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-        -d KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-        -d KSU_MULTI_MANAGER_SUPPORT \
-        -d KSU_SUSFS_SUS_SU
-fi
-
-make $MAKE_ARGS olddefconfig
 
 # 记录开始时间
 START_TIME=$(date +%s)
@@ -255,8 +212,7 @@ else
 fi
 
 # 创建ZIP文件名
-KSU_STR=$($USE_KSU && echo "SU" || echo "NoSU")
-ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_${KSU_STR}_$(date +%y%m%d).zip"
+ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_Resukisu_$(date +%y%m%d)$(date +%H%M).zip"
 
 color_echo "$green" "创建刷机包: $ZIP_NAME"
 (cd "$ANY_KERNEL_DIR" && zip -r9 "$ZIP_NAME" ./* -x .git .gitignore out/ ./*.zip)
