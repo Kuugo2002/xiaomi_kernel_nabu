@@ -31,7 +31,6 @@ color_echo "$green" "工作目录: $SCRIPT_DIR"
 TARGET_DEVICE="nabu"
 KERNEL_NAME="Kuugo"
 KERNEL_VERSION="v1.0"
-USE_KSU=true       # 默认启用 KSU
 NO_CLEAN=false
 MAKE_FLAGS=""
 NUM_JOBS=$(nproc --all)
@@ -59,14 +58,6 @@ while [ $# -gt 0 ]; do
             ;;
         --noclean)
             NO_CLEAN=true
-            shift
-            ;;
-        --nothinlto)
-            USE_THINLTO=false
-            shift
-            ;;
-        --noksu)
-            USE_KSU=false
             shift
             ;;
         --)
@@ -120,9 +111,8 @@ MAKE_ARGS+=" CROSS_COMPILE=aarch64-linux-gnu-"
 
 # 设置 PATH 环境变量
 export PATH="$CLANG_PATH:$PATH"
-export PATH="$HOME/make-4.3:$PATH"
-export IGNORE_GIT=1
-
+export PATH="$HOME/toolchains/python2/bin:$PATH"
+export PATH="$HOME/toolchains/make-4.3:$PATH"
 
 # 检查设备配置是否存在
 if [[ ! -f "$SCRIPT_DIR/arch/arm64/configs/${TARGET_DEVICE}_defconfig" ]]; then
@@ -140,7 +130,7 @@ color_echo "$yellow" "目标设备:    $TARGET_DEVICE"
 color_echo "$yellow" "内核名称:    $KERNEL_NAME"
 color_echo "$yellow" "内核版本:    $KERNEL_VERSION"
 color_echo "$yellow" "编译线程数:  $NUM_JOBS"
-color_echo "$yellow" "KernelSU:    $($USE_KSU && echo "启用" || echo "禁用")"
+color_echo "$yellow" "KernelSU:  启用"
 color_echo "$yellow" "清理:        $($NO_CLEAN && echo "跳过" || echo "执行")"
 color_echo "$cyan" "=============================================="
 
@@ -155,28 +145,21 @@ else
     color_echo "$yellow" "跳过清理步骤..."
 fi
 
-# KernelSU 源码清理与同步
-if $USE_KSU; then
-    color_echo "$green" "正在检查并清理旧的 KernelSU-Next 源码..."
-    
-    # 移除源码根目录下的 KernelSU-Next 文件夹
-    if [ -d "KernelSU-Next" ]; then
-        color_echo "$yellow" "移除旧的 KernelSU-Next 目录..."
-        rm -rf KernelSU-Next
-    fi
-
-    # 移除 drivers/kernelsu 文件夹
-    if [ -d "drivers/kernelsu" ]; then
-        color_echo "$yellow" "移除旧的 drivers/kernelsu 目录..."
-        rm -rf drivers/kernelsu
-    fi
-
-    # 拉取并安装 KernelSU-Next
-    color_echo "$green" "正在下载并配置 KernelSU-Next"
-    curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
-else
-    color_echo "$yellow" "由于未启用 KernelSU，跳过 KernelSU-Next 源码下载与同步。"
+# 移除源码根目录下的 KernelSU 文件夹
+if [ -d "KernelSU-Next" ] && ! $NO_CLEAN; then
+    color_echo "$yellow" "移除旧的 KernelSU 目录..."
+    rm -rf KernelSU-Next
 fi
+
+# 移除 drivers/kernelsu 文件夹
+if [ -d "drivers/kernelsu" ] && ! $NO_CLEAN; then
+    color_echo "$yellow" "移除旧的 drivers/kernelsu 目录..."
+    rm -rf drivers/kernelsu
+fi
+
+# 拉取并安装指定的 KernelSU 版本
+color_echo "$green" "正在下载并配置 KernelSU-Next"
+curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
 # 添加日期到本地版本
 LOCAL_VERSION_STR="-perf"
@@ -189,35 +172,6 @@ make $MAKE_ARGS "${TARGET_DEVICE}_defconfig"
 
 # 设置本地版本
 ./scripts/config --file "$BUILD_DIR/.config" --set-str CONFIG_LOCALVERSION "$LOCAL_VERSION_DATE"
-
-
-# 根据 KSU 启用/禁用配置
-if $USE_KSU; then
-    color_echo "$green" "启用 KernelSU..."
-    ./scripts/config --file "$BUILD_DIR/.config" \
-        -e KSU
-
-else
-    color_echo "$yellow" "禁用 KernelSU..."
-    ./scripts/config --file "$BUILD_DIR/.config" \
-        -d KSU \
-        -d KSU_MANUAL_HOOK \
-        -d KSU_SUSFS_HAS_MAGIC_MOUNT \
-        -d KSU_SUSFS_SUS_MOUNT \
-        -d KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
-        -d KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
-        -d KSU_SUSFS_SUS_KSTAT \
-        -d KSU_SUSFS_TRY_UMOUNT \
-        -d KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
-        -d KSU_SUSFS_SPOOF_UNAME \
-        -d KSU_SUSFS_ENABLE_LOG \
-        -d KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-        -d KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-        -d KSU_MULTI_MANAGER_SUPPORT \
-        -d KSU_SUSFS_SUS_SU
-fi
-
-make $MAKE_ARGS olddefconfig
 
 # 记录开始时间
 START_TIME=$(date +%s)
@@ -246,8 +200,7 @@ ANY_KERNEL_DIR="$SCRIPT_DIR/anykernel"
 cp "$IMAGE_PATH" "$ANY_KERNEL_DIR"
 
 # 创建ZIP文件名
-KSU_STR=$($USE_KSU && echo "SU" || echo "NoSU")
-ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_${KSU_STR}_$(date +%y%m%d).zip"
+ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_KernelSU-Next_$(date +%y%m%d)$(date +%H%M).zip"
 
 color_echo "$green" "创建刷机包: $ZIP_NAME"
 (cd "$ANY_KERNEL_DIR" && zip -r9 "$ZIP_NAME" ./* -x .git .gitignore out/ ./*.zip)
