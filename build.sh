@@ -177,19 +177,9 @@ SECONDS=$((DURATION % 60))
 
 color_echo "$green" "编译成功! 耗时: ${MINUTES}分${SECONDS}秒"
 
-DTB_PATH="$BUILD_DIR/arch/arm64/boot/dtb"
-
-DTBO_PATH="$BUILD_DIR/arch/arm64/boot/dtbo.img"
-
+# 拷贝内核镜像
 ANY_KERNEL_DIR="$SCRIPT_DIR/anykernel"
-
 cp "$IMAGE_PATH" "$ANY_KERNEL_DIR"
-cp "$DTBO_PATH" "$ANY_KERNEL_DIR"
-if [[ -f "$DTB_PATH" ]]; then
-    cp "$DTB_PATH" "$ANY_KERNEL_DIR"
-else
-    color_echo "$yellow" "提示: 未检测到 DTB 文件，跳过复制"
-fi
 
 # 创建ZIP文件名
 ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_NoSU_$(date +%y%m%d)$(date +%H%M).zip"
