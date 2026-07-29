@@ -31,8 +31,6 @@ color_echo "$green" "工作目录: $SCRIPT_DIR"
 TARGET_DEVICE="nabu"
 KERNEL_NAME="Kuugo"
 KERNEL_VERSION="v1.0"
-FIX_VERSION="6"
-USE_KSU=true       # 默认启用 KSU
 NO_CLEAN=false
 MAKE_FLAGS=""
 NUM_JOBS=$(nproc --all)
@@ -60,14 +58,6 @@ while [ $# -gt 0 ]; do
             ;;
         --noclean)
             NO_CLEAN=true
-            shift
-            ;;
-        --nothinlto)
-            USE_THINLTO=false
-            shift
-            ;;
-        --noksu)
-            USE_KSU=false
             shift
             ;;
         --)
@@ -121,10 +111,6 @@ MAKE_ARGS+=" CROSS_COMPILE=aarch64-linux-gnu-"
 
 # 设置 PATH 环境变量
 export PATH="$CLANG_PATH:$PATH"
-export PATH="$HOME/make-4.3:$PATH"
-export IGNORE_GIT=1
-
-
 
 # 检查设备配置是否存在
 if [[ ! -f "$SCRIPT_DIR/arch/arm64/configs/${TARGET_DEVICE}_defconfig" ]]; then
@@ -141,9 +127,8 @@ color_echo "$cyan" "=============================================="
 color_echo "$yellow" "目标设备:    $TARGET_DEVICE"
 color_echo "$yellow" "内核名称:    $KERNEL_NAME"
 color_echo "$yellow" "内核版本:    $KERNEL_VERSION"
-color_echo "$yellow" "修复版本:    $FIX_VERSION"
 color_echo "$yellow" "编译线程数:  $NUM_JOBS"
-color_echo "$yellow" "KernelSU:    $($USE_KSU && echo "启用" || echo "禁用")"
+color_echo "$yellow" "KernelSU:    禁用"
 color_echo "$yellow" "清理:        $($NO_CLEAN && echo "跳过" || echo "执行")"
 color_echo "$cyan" "=============================================="
 
@@ -160,7 +145,7 @@ fi
 
 # 添加日期到本地版本
 LOCAL_VERSION_STR="-perf"
-LOCAL_VERSION_DATE="-${KERNEL_NAME}-${KERNEL_VERSION}-$(date +%y%m%d)${FIX_VERSION}"
+LOCAL_VERSION_DATE="-${KERNEL_NAME}-${KERNEL_VERSION}-$(date +%y%m%d)"
 touch .scmversion
 
 # 配置内核
@@ -169,35 +154,6 @@ make $MAKE_ARGS "${TARGET_DEVICE}_defconfig"
 
 # 设置本地版本
 ./scripts/config --file "$BUILD_DIR/.config" --set-str CONFIG_LOCALVERSION "$LOCAL_VERSION_DATE"
-
-
-# 根据 KSU 启用/禁用配置
-if $USE_KSU; then
-    color_echo "$green" "启用 KernelSU..."
-    ./scripts/config --file "$BUILD_DIR/.config" \
-        -e KSU
-
-else
-    color_echo "$yellow" "禁用 KernelSU..."
-    ./scripts/config --file "$BUILD_DIR/.config" \
-        -d KSU \
-        -d KSU_MANUAL_HOOK \
-        -d KSU_SUSFS_HAS_MAGIC_MOUNT \
-        -d KSU_SUSFS_SUS_MOUNT \
-        -d KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT \
-        -d KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT \
-        -d KSU_SUSFS_SUS_KSTAT \
-        -d KSU_SUSFS_TRY_UMOUNT \
-        -d KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT \
-        -d KSU_SUSFS_SPOOF_UNAME \
-        -d KSU_SUSFS_ENABLE_LOG \
-        -d KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
-        -d KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-        -d KSU_MULTI_MANAGER_SUPPORT \
-        -d KSU_SUSFS_SUS_SU
-fi
-
-make $MAKE_ARGS olddefconfig
 
 # 记录开始时间
 START_TIME=$(date +%s)
@@ -221,13 +177,22 @@ SECONDS=$((DURATION % 60))
 
 color_echo "$green" "编译成功! 耗时: ${MINUTES}分${SECONDS}秒"
 
-# 拷贝内核镜像
+DTB_PATH="$BUILD_DIR/arch/arm64/boot/dtb"
+
+DTBO_PATH="$BUILD_DIR/arch/arm64/boot/dtbo.img"
+
 ANY_KERNEL_DIR="$SCRIPT_DIR/anykernel"
+
 cp "$IMAGE_PATH" "$ANY_KERNEL_DIR"
+cp "$DTBO_PATH" "$ANY_KERNEL_DIR"
+if [[ -f "$DTB_PATH" ]]; then
+    cp "$DTB_PATH" "$ANY_KERNEL_DIR"
+else
+    color_echo "$yellow" "提示: 未检测到 DTB 文件，跳过复制"
+fi
 
 # 创建ZIP文件名
-KSU_STR=$($USE_KSU && echo "SU" || echo "NoSU")
-ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_${KSU_STR}_$(date +%y%m%d)${FIX_VERSION}.zip"
+ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_NoSU_$(date +%y%m%d)$(date +%H%M).zip"
 
 color_echo "$green" "创建刷机包: $ZIP_NAME"
 (cd "$ANY_KERNEL_DIR" && zip -r9 "$ZIP_NAME" ./* -x .git .gitignore out/ ./*.zip)
