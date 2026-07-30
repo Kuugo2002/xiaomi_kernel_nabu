@@ -111,6 +111,7 @@ MAKE_ARGS+=" CROSS_COMPILE=aarch64-linux-gnu-"
 
 # 设置 PATH 环境变量
 export PATH="$CLANG_PATH:$PATH"
+export PATH="$HOME/toolchains/python2/bin:$PATH"
 
 # 检查设备配置是否存在
 if [[ ! -f "$SCRIPT_DIR/arch/arm64/configs/${TARGET_DEVICE}_defconfig" ]]; then
