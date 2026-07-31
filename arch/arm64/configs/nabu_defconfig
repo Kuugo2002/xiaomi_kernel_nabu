@@ -6042,6 +6042,7 @@ CONFIG_MACH_XIAOMI_SM8150=y
 # Xiaomi board selection
 #
 # CONFIG_MACH_XIAOMI_NABU is not set
+
 # Kernel configurations for full DroidSpaces support
 # Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
 
@@ -6114,6 +6115,10 @@ CONFIG_IP_NF_NAT=y
 
 # Disable this on older kernels to make internet work
 CONFIG_ANDROID_PARANOID_NETWORK=n
+
+# Fix for docker unsafe procfs error
+CONFIG_USER_NS=y
+
 # UFW & FAIL2BAN CORE
 CONFIG_NETFILTER_XT_MATCH_COMMENT=y
 CONFIG_NETFILTER_XT_MATCH_STATE=y
