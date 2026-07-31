@@ -10,21 +10,23 @@
 
 ## 🌿 分支说明
 
-本仓库包含 8 个主要分支，分别对应不同的系统版本和 Root 方案需求：
+本仓库包含 6 个主要分支，分别对应不同的系统版本和 Root 方案需求：
 
-| 系统版本 | 纯净版 (无Root修补) | KernelSU | KernelSU-Next | ReSuKisu |
-| :--- | :--- | :--- | :--- | :--- |
-| **HyperOS 1.0** | `HyperOS1` | `HyperOS1-ksu` | `HyperOS1-ksu-next` | `HyperOS1-resukisu` |
-| **HyperOS 2.0** | `HyperOS2` | `HyperOS2-ksu` | `HyperOS2-ksu-next` | `HyperOS2-resukisu` |
+| 系统版本 | 纯净版 (无Root修补) | KernelSU-Next | ReSuKisu |
+| :--- | :--- | :--- | :--- |
+| **HyperOS 1.0** | `HyperOS1` | `HyperOS1-ksu-next` | `HyperOS1-resukisu` |
+| **HyperOS 2.0** | `HyperOS2` | `HyperOS2-ksu-next` | `HyperOS2-resukisu` |
 
 > **💡 提示**：
-> - **不带任何后缀**的分支（如 `HyperOS1`、`HyperOS2`）为纯净版内核，未进行任何 KernelSU 相关的代码修补。
+> - **不带任何后缀**的分支（如 `HyperOS1`、`HyperOS2`）为纯净版内核，未进行任何 Root 相关的代码修补。
 > - 所有分支均已针对 **Droidspaces** 进行了内核配置优化。
 
 ## ⚠️ 兼容性与注意事项
 
 - **Android 16**：**不支持**任何 Android 16 的版本。
 - **HyperOS 2**：原装键盘无法使用，手写笔断触，有部分位置手写笔写不上。
+- **v0.1 版本**：仅支持 cgroup v1。
+- **v0.2 版本**：支持 cgroup v2，但 KernelSU 管理器无法更改应用 root 权限。
 
 
 ## 🛠️ 编译指南
