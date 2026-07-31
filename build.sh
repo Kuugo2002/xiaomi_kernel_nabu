@@ -93,12 +93,6 @@ MAKE_ARGS+=" KBUILD_BUILD_USER=kuugo"
 MAKE_ARGS+=" ARCH=arm64"
 MAKE_ARGS+=" SUBARCH=arm64"
 
-# 忽略部分错误
-MAKE_ARGS+=" KCFLAGS=-Wno-unused-but-set-variable"
-MAKE_ARGS+=" KCFLAGS+=-Wno-enum-conversion"
-MAKE_ARGS+=" KCFLAGS+=-Wno-strict-prototypes"
-MAKE_ARGS+=" KCFLAGS+=-Wno-array-parameter"
-
 # LLVM toolchain
 MAKE_ARGS+=" CC=$CLANG_BIN"
 MAKE_ARGS+=" LD=ld.lld"
@@ -162,6 +156,7 @@ fi
 # 拉取并安装指定的 KernelSU 版本
 color_echo "$green" "正在下载并配置 KernelSU-Next"
 curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+
 # 添加日期到本地版本
 LOCAL_VERSION_STR="-perf"
 LOCAL_VERSION_DATE="-${KERNEL_NAME}-${KERNEL_VERSION}-$(date +%y%m%d)"
