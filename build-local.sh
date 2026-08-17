@@ -5,6 +5,8 @@ yellow='\033[0;33m'
 white='\033[0m'
 red='\033[0;31m'
 green='\033[0;32m'
+blue='\033[0;34m'
+purple='\033[0;35m'
 cyan='\033[0;36m'
 
 # 输出带颜色的消息函数
@@ -74,6 +76,12 @@ done
 BUILD_DIR="../Releases_${TARGET_DEVICE}_${KERNEL_NAME}"
 color_echo "$green" "使用独立构建目录: $BUILD_DIR"
 
+CLANG_PATH=${CLANG_PATH:-$HOME/toolchains/clang-A15/bin}
+
+# 设置完整的工具路径
+export CLANG_BIN="$CLANG_PATH/clang"
+export CLANGXX_BIN="$CLANG_PATH/clang++"
+
 # 修改产物路径
 MAKE_ARGS="O=$BUILD_DIR"
 
@@ -85,15 +93,19 @@ MAKE_ARGS+=" KBUILD_BUILD_USER=kuugo"
 MAKE_ARGS+=" ARCH=arm64"
 MAKE_ARGS+=" SUBARCH=arm64"
 
-# LLVM toolchain（系统 clang）
-MAKE_ARGS+=" CC=clang"
+# LLVM toolchain
+MAKE_ARGS+=" CC=$CLANG_BIN"
 MAKE_ARGS+=" LD=ld.lld"
 MAKE_ARGS+=" NM=llvm-nm"
 MAKE_ARGS+=" OBJDUMP=llvm-objdump"
 MAKE_ARGS+=" STRIP=llvm-strip"
 
-# 交叉编译工具链（系统 GNU binutils）
+# 交叉编译工具链（GNU binutils）
 MAKE_ARGS+=" CROSS_COMPILE=aarch64-linux-gnu-"
+
+# 设置 PATH 环境变量
+export PATH="$CLANG_PATH:$PATH"
+export PATH="$HOME/toolchains/python2/bin:$PATH"
 
 # 检查设备配置是否存在
 if [[ ! -f "$SCRIPT_DIR/arch/arm64/configs/${TARGET_DEVICE}_defconfig" ]]; then
@@ -111,12 +123,12 @@ color_echo "$yellow" "目标设备:    $TARGET_DEVICE"
 color_echo "$yellow" "内核名称:    $KERNEL_NAME"
 color_echo "$yellow" "内核版本:    $KERNEL_VERSION"
 color_echo "$yellow" "编译线程数:  $NUM_JOBS"
-color_echo "$yellow" "KernelSU:    禁用"
+color_echo "$yellow" "KernelSU:  启用"
 color_echo "$yellow" "清理:        $($NO_CLEAN && echo "跳过" || echo "执行")"
 color_echo "$cyan" "=============================================="
 
 color_echo "$green" "[clang 版本信息]:"
-clang --version
+"$CLANG_BIN" --version
 
 # 清理工作区
 if ! $NO_CLEAN; then
@@ -146,6 +158,7 @@ color_echo "$green" "正在下载并配置 KernelSU-Next"
 curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
 # 添加日期到本地版本
+LOCAL_VERSION_STR="-perf"
 LOCAL_VERSION_DATE="-${KERNEL_NAME}-${KERNEL_VERSION}-$(date +%y%m%d)"
 touch .scmversion
 
@@ -193,7 +206,7 @@ else
 fi
 
 # 创建ZIP文件名
-ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_NoSU_$(date +%y%m%d)$(date +%H%M).zip"
+ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_KernelSU-Next_$(date +%y%m%d)$(date +%H%M).zip"
 
 color_echo "$green" "创建刷机包: $ZIP_NAME"
 (cd "$ANY_KERNEL_DIR" && zip -r9 "$ZIP_NAME" ./* -x .git .gitignore out/ ./*.zip)
