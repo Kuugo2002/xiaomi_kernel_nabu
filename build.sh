@@ -193,7 +193,7 @@ else
 fi
 
 # 创建ZIP文件名
-ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_NoSU_$(date +%y%m%d)$(date +%H%M).zip"
+ZIP_NAME="${TARGET_DEVICE}_${KERNEL_NAME}-${KERNEL_VERSION}_KernelSU-Next_$(date +%y%m%d)$(date +%H%M).zip"
 
 color_echo "$green" "创建刷机包: $ZIP_NAME"
 (cd "$ANY_KERNEL_DIR" && zip -r9 "$ZIP_NAME" ./* -x .git .gitignore out/ ./*.zip)
