@@ -1,0 +1,61 @@
+name: Build kernel
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Python 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          installer="/home/kuugo/script/install-python2.sh"
+          if [[ ! -f "$installer" ]]; then
+            installer="$GITHUB_WORKSPACE/scripts/install-python2.sh"
+          fi
+          chmod +x "$installer"
+          sudo env INSTALL_PIP=0 bash "$installer"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+          python2.7 --version
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc \
+            bison \
+            clang \
+            flex \
+            gcc-aarch64-linux-gnu \
+            libssl-dev \
+            lld \
+            libelf-dev \
+            make \
+            zip
+
+      - name: Build kernel and AnyKernel3 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x build.sh
+          ./build.sh nabu -j"$(nproc)"
+
+      - name: Upload AnyKernel3 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: anykernel3-nabu
+          path: ../Releases_nabu_Kuugo/*.zip
+          if-no-files-found: error
+          compression-level: 0
