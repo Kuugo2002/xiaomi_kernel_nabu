@@ -67,12 +67,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          cp ../Releases_nabu_Kuugo/*.zip artifacts/
+          shopt -s nullglob
+          packages=(../Releases_nabu_Kuugo/*.zip)
+          if (( ${#packages[@]} != 1 )); then
+            echo "Expected exactly one AnyKernel3 package, found ${#packages[@]}" >&2
+            exit 1
+          fi
+          unzip -q "${packages[0]}" -d artifacts
 
       - name: Upload AnyKernel3 package
         uses: actions/upload-artifact@v4
         with:
           name: anykernel3-nabu
-          path: artifacts/*.zip
+          path: artifacts/
           if-no-files-found: error
           compression-level: 0
+          include-hidden-files: true
