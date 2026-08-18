@@ -62,10 +62,17 @@ jobs:
           chmod +x build.sh
           ./build.sh nabu -j"$(nproc)"
 
+      - name: Stage AnyKernel3 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cp ../Releases_nabu_Kuugo/*.zip artifacts/
+
       - name: Upload AnyKernel3 package
         uses: actions/upload-artifact@v4
         with:
           name: anykernel3-nabu
-          path: ../Releases_nabu_Kuugo/*.zip
+          path: artifacts/*.zip
           if-no-files-found: error
           compression-level: 0
