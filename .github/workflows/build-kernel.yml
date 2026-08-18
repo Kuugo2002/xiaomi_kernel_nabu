@@ -2,9 +2,6 @@ name: Build kernel
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - '**'
 
 permissions:
   contents: read
