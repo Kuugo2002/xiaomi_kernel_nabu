@@ -1,0 +1,88 @@
+name: Build kernel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Python 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          installer="/home/kuugo/script/install-python2.sh"
+          if [[ ! -f "$installer" ]]; then
+            installer="$GITHUB_WORKSPACE/scripts/install-python2.sh"
+          fi
+          chmod +x "$installer"
+          sudo env INSTALL_PIP=0 bash "$installer"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+          python2.7 --version
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc \
+            bison \
+            flex \
+            gcc-aarch64-linux-gnu \
+            libssl-dev \
+            libelf-dev \
+            make \
+            zip
+
+      - name: Install Clang A15 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/clang-A15.tar.xz"
+          toolchain_dir="$RUNNER_TEMP/clang-A15"
+          curl --fail --location --retry 3 \
+            --output "$archive" \
+            https://github.com/Kuugo2002/xiaomi_kernel_nabu/releases/download/v0.1/clang-A15.tar.xz
+          tar --extract --xz --file "$archive" --directory "$RUNNER_TEMP"
+          test -x "$toolchain_dir/bin/clang"
+          echo "$toolchain_dir/bin" >> "$GITHUB_PATH"
+          "$toolchain_dir/bin/clang" --version
+
+      - name: Build kernel and AnyKernel3 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v clang
+          chmod +x build.sh
+          ./build.sh nabu -j"$(nproc)"
+
+      - name: Stage AnyKernel3 package
+        id: stage_package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          shopt -s nullglob
+          packages=(../Releases_nabu_Kuugo/*.zip)
+          if (( ${#packages[@]} != 1 )); then
+            echo "Expected exactly one AnyKernel3 package, found ${#packages[@]}" >&2
+            exit 1
+          fi
+          package_filename="$(basename "${packages[0]}")"
+          echo "artifact_name=${package_filename%.zip}" >> "$GITHUB_OUTPUT"
+          unzip -q "${packages[0]}" -d artifacts
+
+      - name: Upload AnyKernel3 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.stage_package.outputs.artifact_name }}
+          path: artifacts/
+          if-no-files-found: error
+          compression-level: 0
+          include-hidden-files: true
