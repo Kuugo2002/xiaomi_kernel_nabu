@@ -63,6 +63,7 @@ jobs:
           ./build.sh nabu -j"$(nproc)"
 
       - name: Stage AnyKernel3 package
+        id: stage_package
         shell: bash
         run: |
           set -euo pipefail
@@ -73,12 +74,14 @@ jobs:
             echo "Expected exactly one AnyKernel3 package, found ${#packages[@]}" >&2
             exit 1
           fi
+          package_filename="$(basename "${packages[0]}")"
+          echo "artifact_name=${package_filename%.zip}" >> "$GITHUB_OUTPUT"
           unzip -q "${packages[0]}" -d artifacts
 
       - name: Upload AnyKernel3 package
         uses: actions/upload-artifact@v4
         with:
-          name: anykernel3-nabu
+          name: ${{ steps.stage_package.outputs.artifact_name }}
           path: artifacts/
           if-no-files-found: error
           compression-level: 0
