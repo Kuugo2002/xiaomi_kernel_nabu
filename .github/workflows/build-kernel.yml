@@ -18,12 +18,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          installer="/home/kuugo/script/install-python2.sh"
-          if [[ ! -f "$installer" ]]; then
-            installer="$GITHUB_WORKSPACE/scripts/install-python2.sh"
-          fi
-          chmod +x "$installer"
-          sudo env INSTALL_PIP=0 bash "$installer"
+          sudo env INSTALL_PIP=0 bash "$GITHUB_WORKSPACE/.github/install-python2.sh"
           echo "/usr/local/bin" >> "$GITHUB_PATH"
           python2.7 --version
 
