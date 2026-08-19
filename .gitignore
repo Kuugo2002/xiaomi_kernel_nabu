@@ -76,9 +76,9 @@ modules.builtin
 !.gitignore
 !.mailmap
 !.cocciconfig
-!.github/
-!.github/workflows/
-!.github/workflows/*.yml
+# !.github/
+# !.github/workflows/
+# !.github/workflows/*.yml
 
 #
 # Generated include files
